@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+vagas.db
+vagas.db-*
+cache_detalhes.json
+saude_fontes.json
+to_no_corre.log
+browser_profiles/
+backups/
+perfil.json
+curriculo.txt
+curriculo.pdf
+curriculo.docx
+curriculo_original.*
+build/
+dist/
+*.zip

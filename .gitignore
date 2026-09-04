@@ -1,0 +1,44 @@
+# Executáveis e builds
+*.exe
+*.zip
+build/
+dist/
+_internal/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Bancos, cache e logs
+*.db
+*.log
+cache_detalhes.json
+perfil.json
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+
+# Arquivos temporários
+*.tmp
+*.temp
+
+# Dados pessoais / currículos
+curriculo.txt
+curriculo_original.pdf
+**/curriculo.txt
+**/curriculo_original.pdf
+
+# Perfis de navegador - NUNCA enviar
+browser_profiles/
+**/browser_profiles/
+
+# Dados locais
+perfil.json
+**/perfil.json
+*.db
+*.log
+cache_detalhes.json

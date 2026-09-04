@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+vagas.db
+cache_detalhes.json
+saude_fontes.json
+to_no_corre.log
+browser_profiles/

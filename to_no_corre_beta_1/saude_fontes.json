@@ -1,0 +1,29 @@
+{
+  "Remotive": {
+    "total": 19,
+    "empresa_pct": 100,
+    "local_pct": 100,
+    "descricao_pct": 100,
+    "data_pct": 100,
+    "modalidade_pct": 100,
+    "atualizado_em": "31/08/2026 20:41"
+  },
+  "Gupy": {
+    "total": 456,
+    "empresa_pct": 100,
+    "local_pct": 95,
+    "descricao_pct": 100,
+    "data_pct": 100,
+    "modalidade_pct": 100,
+    "atualizado_em": "31/08/2026 20:41"
+  },
+  "LinkedIn": {
+    "total": 475,
+    "empresa_pct": 100,
+    "local_pct": 99,
+    "descricao_pct": 0,
+    "data_pct": 0,
+    "modalidade_pct": 0,
+    "atualizado_em": "31/08/2026 20:41"
+  }
+}
