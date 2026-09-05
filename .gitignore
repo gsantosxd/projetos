@@ -42,3 +42,10 @@ perfil.json
 *.db
 *.log
 cache_detalhes.json
+
+build*/
+dist*/
+*.db-shm
+*.db-wal
+__pycache__/
+*.pyc
