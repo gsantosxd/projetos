@@ -173,6 +173,34 @@ class StabilizationTests(unittest.TestCase):
             result=app.App.collect(instance,"all")
         self.assertEqual(5,len(result));self.assertEqual(3,google.call_count);international.assert_not_called()
 
+    def test_mixed_mode_collects_regular_jobs_and_internships_with_independent_quotas(self):
+        instance=object.__new__(app.App);instance.p={
+            "modo_estagios":"incluir","buscar_estagios":True,"_disable_persistent_source_cache":True,
+            "consultas_vagas_gupy":["assistente jurídico"],
+            "consultas_estagio_gupy":["estágio direito"],
+            "consultas_vagas_linkedin":[],"consultas_estagio_linkedin":[],
+            "consultas_vagas_google":[],"consultas_estagio_google":[]}
+        seen=[]
+        def fetch(profile):
+            query=profile["consultas_gupy"][0];seen.append(query)
+            return [{"titulo":query,"empresa":"Empresa","local":"Brasil",
+                     "url":"https://vaga/"+str(len(seen)),"fonte":"Gupy"}]
+        with patch.object(app,"fetch_gupy",side_effect=fetch) as source:
+            result=app.App.collect(instance,"gupy")
+        self.assertEqual(2,len(result));self.assertEqual(2,source.call_count)
+        self.assertEqual(["assistente jurídico","estágio direito"],seen)
+
+    def test_internship_portals_are_queried_with_official_domains(self):
+        captured=[]
+        def fetch(_profile,site,source_name,**_kwargs):
+            captured.append((site,source_name));return []
+        with patch.object(app,"fetch_google",side_effect=fetch):
+            self.assertEqual([],app.fetch_internship_portals(app.default_profile()))
+        domains={site for site,_source in captured}
+        self.assertEqual(5,len(domains))
+        for expected in ("portal.ciee.org.br","nube.com.br","ielcarreiras.com.br","eureca.me","ciadeestagios.com.br"):
+            self.assertTrue(any(expected in domain for domain in domains))
+
     def test_reset_for_new_user_removes_personal_state_and_keeps_database_ready(self):
         with tempfile.TemporaryDirectory() as directory:
             instance=object.__new__(app.App);instance.search_running=False
@@ -216,6 +244,8 @@ class StabilizationTests(unittest.TestCase):
         instance=object.__new__(app.App);instance.conn=conn;app.App.db(instance)
         self.assertFalse(app.App.privacy_notice_accepted(instance))
         app.App.meta_set(instance,"aviso_privacidade_versao",app.PRIVACY_NOTICE_VERSION)
+        self.assertFalse(app.App.privacy_notice_accepted(instance))
+        app.App.meta_set(instance,"termos_uso_versao",app.TERMS_OF_USE_VERSION)
         self.assertTrue(app.App.privacy_notice_accepted(instance))
         conn.close()
 
@@ -231,10 +261,10 @@ class StabilizationTests(unittest.TestCase):
             self.assertFalse(app.protect_local_data_directory())
             run.assert_not_called()
 
-    def test_build_uses_stable_data_directory_and_knows_last_beta(self):
-        self.assertEqual("Data",app.APP_DATA_VERSION)
-        self.assertIn("Beta0_9_0",app.LEGACY_APP_DATA_VERSIONS)
-        self.assertEqual("0.9.1-beta",app.APP_VERSION)
+    def test_stable_beta_uses_fresh_isolated_data_directory(self):
+        self.assertEqual("BetaEstavel3",app.APP_DATA_VERSION)
+        self.assertEqual((),app.LEGACY_APP_DATA_VERSIONS)
+        self.assertEqual("0.9.4-beta-estável",app.APP_VERSION)
 
     def test_legacy_data_migration_copies_without_deleting_source(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -278,6 +308,26 @@ class StabilizationTests(unittest.TestCase):
         notice=app.norm(app.PRIVACY_NOTICE)
         for expected in ("neste computador","comunicacoes externas","pcd","limpar tudo","nao ha servidor"):
             self.assertIn(expected,notice)
+
+    def test_terms_explain_beta_limits_human_review_and_mandatory_rights(self):
+        terms=app.norm(app.TERMS_OF_USE)
+        for expected in ("fase beta","decisao final","fontes independentes","supervisao humana",
+                         "nada nestes termos limita direitos"):
+            self.assertIn(expected,terms)
+
+    def test_job_detail_actions_are_responsive(self):
+        with open(app.__file__,encoding="utf-8") as stream:source=stream.read()
+        self.assertIn('def resize_detail_panel(event):',source)
+        self.assertIn('if detail_layout["width"]==width:return',source)
+        self.assertIn('stacked=width<245',source)
+        self.assertIn('open_job_button.grid_configure(row=1,column=0,columnspan=2',source)
+        self.assertIn('discard_job_button.grid_configure(row=2,column=0,columnspan=2',source)
+        self.assertNotIn('preserve_detail_panel_width',source)
+
+    def test_soft_dark_palette_avoids_pure_black_and_white(self):
+        with open(app.__file__,encoding="utf-8") as stream:source=stream.read().lower()
+        for color in ("#141922","#1b2230","#202938","#e6eaf0","#5b8def","#344154"):
+            self.assertIn(color,source)
 
     def test_english_resume_is_recorded_as_fluent_english(self):
         profile=app.default_profile()
@@ -453,6 +503,35 @@ class StabilizationTests(unittest.TestCase):
         self.assertIn("Cariacica, Espirito Santo, Brazil",locations)
         self.assertEqual({"Brazil","Cariacica, Espirito Santo, Brazil"},set(locations))
 
+    def test_linkedin_only_internships_searches_every_configured_city_and_state(self):
+        calls=[]
+        html="""<li><a href='https://linkedin.test/jobs/view/intern-123456'></a>
+        <h3 class='base-search-card__title'>Estágio em Direito</h3></li>"""
+        def search(_query,remote,location,start=0):
+            calls.append((remote,location,start));return html if start==0 else ""
+        profile={"consultas_linkedin":["estágio direito"],
+                 "cidades_presencial":["Cariacica","Vitória","Vila Velha","Viana"],
+                 "estado_local":"ES","modo_estagios":"somente","buscar_estagios":True,
+                 "aceitar_remoto":True}
+        with patch.object(app,"linkedin_search_html",side_effect=search):app.fetch_linkedin(profile)
+        local_locations={location for remote,location,_start in calls if not remote}
+        self.assertEqual({
+            "Cariacica, Espirito Santo, Brazil","Vitoria, Espirito Santo, Brazil",
+            "Vila Velha, Espirito Santo, Brazil","Viana, Espirito Santo, Brazil",
+            "Espirito Santo, Brazil"},local_locations)
+        self.assertEqual([(True,"Brazil",0),(True,"Brazil",25)],
+                         [call for call in calls if call[0]])
+        self.assertFalse(calls[0][0])
+
+    def test_linkedin_only_internships_skips_remote_when_user_rejects_it(self):
+        calls=[]
+        def search(_query,remote,location,start=0):calls.append((remote,location));return ""
+        profile={"consultas_linkedin":["estágio direito"],"cidades_presencial":["Recife"],
+                 "estado_local":"PE","modo_estagios":"somente","buscar_estagios":True,
+                 "aceitar_remoto":False}
+        with patch.object(app,"linkedin_search_html",side_effect=search):app.fetch_linkedin(profile)
+        self.assertTrue(calls);self.assertTrue(all(not remote for remote,_location in calls))
+
     def test_city_requires_configured_state(self):
         profile=dict(self.profile);profile["cidades_presencial"]=["Vitória"]
         self.assertFalse(app.location_decision(
@@ -550,6 +629,33 @@ class StabilizationTests(unittest.TestCase):
         self.assertGreater(recent_score,old_score)
         self.assertIn("Publicação recente",reason)
 
+    def test_current_publication_age_setting_overrides_legacy_default(self):
+        published=(datetime.now().date()-timedelta(days=20)).isoformat()
+        job={"data_publicacao":published}
+        profile={"idade_maxima_dias":7,"idade_maxima_vaga_dias":60}
+        self.assertEqual((False,20),app.vacancy_date_ok(job,profile))
+
+    def test_publication_age_preference_moves_and_restores_saved_job(self):
+        conn=sqlite3.connect(":memory:")
+        instance=object.__new__(app.App);instance.conn=conn;instance.refresh=lambda:None
+        app.App.db(instance)
+        published=(datetime.now().date()-timedelta(days=20)).isoformat()
+        conn.execute("""INSERT INTO vagas(titulo,empresa,local,descricao,url,fonte,data_publicacao,
+                     status,selecionada_lote) VALUES(?,?,?,?,?,?,?,?,0)""",
+                     ("Assistente","Empresa","Vitória, ES","Rotinas administrativas",
+                      "https://vaga/data-antiga","Gupy",published,"Nova"))
+        instance.p={"idade_maxima_dias":7,"idade_maxima_vaga_dias":60}
+        moved,restored=app.App.apply_publication_age_preference(instance)
+        self.assertEqual((1,0),(moved,restored))
+        self.assertEqual("Ignorada",conn.execute("SELECT status FROM vagas").fetchone()[0])
+        self.assertIn("vaga antiga",conn.execute("SELECT motivo_descarte FROM descartadas").fetchone()[0])
+        instance.p["idade_maxima_dias"]=60
+        moved,restored=app.App.apply_publication_age_preference(instance)
+        self.assertEqual((0,1),(moved,restored))
+        self.assertEqual("Nova",conn.execute("SELECT status FROM vagas").fetchone()[0])
+        self.assertEqual(0,conn.execute("SELECT COUNT(*) FROM descartadas").fetchone()[0])
+        conn.close()
+
     def test_expired_valid_through_is_closed_only_after_deadline(self):
         yesterday=(datetime.now().date()-timedelta(days=1)).isoformat()
         tomorrow=(datetime.now().date()+timedelta(days=1)).isoformat()
@@ -632,6 +738,22 @@ class StabilizationTests(unittest.TestCase):
         enabled=dict(self.profile,buscar_estagios=True)
         self.assertEqual((False,"estágio desativado pelo usuário"),app.hard_filter(job,disabled))
         self.assertNotEqual("estágio desativado pelo usuário",app.hard_filter(job,enabled)[1])
+
+    def test_only_internships_rejects_regular_jobs_and_keeps_internships(self):
+        profile=dict(self.profile,modo_estagios="somente",buscar_estagios=True)
+        regular={"titulo":"Assistente Administrativo","descricao":"Rotinas administrativas","local":"Vitória, ES"}
+        internship={"titulo":"Estágio em Direito","descricao":"Estudante de Direito","local":"Vitória, ES"}
+        self.assertEqual((False,"modo somente estágios"),app.hard_filter(regular,profile))
+        self.assertNotEqual("modo somente estágios",app.hard_filter(internship,profile)[1])
+
+    def test_only_internships_generates_only_internship_queries(self):
+        profile=app.default_profile();profile.update({"modo_estagios":"somente","buscar_estagios":True})
+        app.adapt_profile_to_cv(profile,"Cursando Direito. Experiência com contratos e atendimento.")
+        queries=profile["consultas_gupy"]+profile["consultas_linkedin"]
+        self.assertTrue(queries)
+        self.assertTrue(all(any(token in app.semantic_norm(query).split()
+                                for token in ("estagio","estagiario","estagiaria","intern","internship"))
+                            for query in queries))
 
     def test_disabled_internships_are_removed_from_existing_results_but_not_queue(self):
         conn=sqlite3.connect(":memory:")
@@ -830,6 +952,13 @@ class StabilizationTests(unittest.TestCase):
         self.assertEqual(1,fetch.call_count)
         self.assertEqual(first,second)
 
+    def test_source_cache_is_separate_for_each_publication_period(self):
+        base={"consultas_gupy":["assistente"],"estado_local":"ES"}
+        seven=dict(base,idade_maxima_dias=7,idade_maxima_vaga_dias=7)
+        sixty=dict(base,idade_maxima_dias=60,idade_maxima_vaga_dias=60)
+        self.assertNotEqual(app.source_search_signature("Gupy",seven),
+                            app.source_search_signature("Gupy",sixty))
+
     def test_persistent_source_cache_falls_back_when_source_fails(self):
         profile={"consultas_linkedin":["assistente"],"estado_local":"ES"}
         job={"titulo":"Assistente","empresa":"Empresa","local":"Vitória, ES",
@@ -994,10 +1123,41 @@ class StabilizationTests(unittest.TestCase):
         resume="Cursando Direito. Experiência profissional em rotinas jurídicas e contratos."
         app.adapt_profile_to_cv(profile,resume)
         queries=[app.norm(query) for query in profile["consultas_gupy"]]
-        for expected in ("juridico","contratos","cobranca","estagio"):
+        for expected in ("juridico","contratos","cobranca","estagio direito","estagio juridico"):
             self.assertIn(expected,queries)
+        self.assertNotIn("estagio",queries)
         self.assertIn("legal operations",queries)
         self.assertLess(queries.index("assistente juridico"),queries.index("juridico"))
+
+    def test_selected_internship_areas_focus_queries_and_course_validation(self):
+        profile=app.default_profile();profile.update({
+            "modo_estagios":"somente","buscar_estagios":True,"areas_estagio_manual":True,
+            "areas_estagio":["direito","analise e desenvolvimento de sistemas"]})
+        app.adapt_profile_to_cv(profile,"Cursando Direito e Análise e Desenvolvimento de Sistemas.")
+        queries=[app.semantic_norm(query) for query in profile["consultas_gupy"]]
+        self.assertIn("estagio direito",queries)
+        self.assertIn("estagio desenvolvimento de sistemas",queries)
+        self.assertNotIn("estagio",queries)
+        self.assertEqual("FORA",app.internship_course_status(
+            {"titulo":"Estágio em Psicologia","descricao":""},profile))
+
+    def test_selected_internship_areas_remove_inherited_unrelated_queries(self):
+        profile=app.default_profile();profile.update({
+            "modo_estagios":"somente","buscar_estagios":True,"areas_estagio_manual":True,
+            "areas_estagio":["direito"],
+            "consultas_br":["estágio","estágio administração","estágio enfermagem"],
+            "consultas_gupy":["estágio psicologia"],"consultas_linkedin":["estágio marketing"]})
+        app.adapt_profile_to_cv(profile,"Cursando Direito. Experiência com contratos.")
+        queries=[app.semantic_norm(query) for query in profile["consultas_gupy"]]
+        self.assertIn("estagio direito",queries)
+        self.assertFalse(any(area in query for query in queries
+                             for area in ("administracao","enfermagem","psicologia","marketing")))
+
+    def test_unknown_internship_area_receives_safe_generic_queries(self):
+        portuguese,english=app.internship_area_queries(["Oceanografia"])
+        self.assertEqual(["estágio Oceanografia","estagiário Oceanografia",
+                          "programa de estágio Oceanografia"],portuguese)
+        self.assertIn("Oceanografia internship",english)
 
     def test_v25_description_migration_is_additive_and_idempotent(self):
         conn=sqlite3.connect(":memory:")
@@ -1122,6 +1282,18 @@ class StabilizationTests(unittest.TestCase):
         self.assertEqual({"Estágio"},titles("estagio"))
         self.assertEqual({"Auxiliar (PCD)"},titles("pcd"))
         self.assertEqual(5,len(titles("todas")))
+        conn.close()
+
+    def test_main_text_filter_searches_job_company_location_source_and_description(self):
+        conn=sqlite3.connect(":memory:")
+        instance=object.__new__(app.App);instance.conn=conn;app.App.db(instance)
+        values=("Analista","Empresa Alfa","Campinas, SP","Remoto Brasil — confirmado",
+                "Atendimento ao cliente","https://vaga/filtro","LinkedIn",80,"Geral","APROVADA","Nova")
+        conn.execute("""INSERT INTO vagas(titulo,empresa,local,modalidade,descricao,url,fonte,score,categoria,decisao,status)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?)""",values)
+        for term in ("Analista","Alfa","Campinas","Remoto","cliente","LinkedIn"):
+            sql,params=app.jobs_query("todas",term)
+            self.assertEqual(1,len(conn.execute(sql,params).fetchall()),term)
         conn.close()
 
     def test_batch_selection_replaces_queue_without_deleting_jobs(self):

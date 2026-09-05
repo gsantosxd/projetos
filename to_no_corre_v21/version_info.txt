@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(0, 9, 1, 0),
-    prodvers=(0, 9, 1, 0),
+    filevers=(0, 9, 4, 0),
+    prodvers=(0, 9, 4, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -14,11 +14,11 @@ VSVersionInfo(
       StringTable('040904B0', [
         StringStruct('CompanyName', 'Tô no Corre'),
         StringStruct('FileDescription', 'Tô no Corre — busca local de vagas'),
-        StringStruct('FileVersion', '0.9.1-beta'),
+        StringStruct('FileVersion', '0.9.4-beta-estavel'),
         StringStruct('InternalName', 'ToNoCorre'),
         StringStruct('OriginalFilename', 'ToNoCorre.exe'),
         StringStruct('ProductName', 'Tô no Corre'),
-        StringStruct('ProductVersion', '0.9.1-beta')
+        StringStruct('ProductVersion', '0.9.4-beta-estavel')
       ])
     ]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])

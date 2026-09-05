@@ -15,13 +15,23 @@ except Exception:
     BeautifulSoup = None
 
 APP_TITLE="Tô no Corre"
-APP_VERSION="0.9.1-beta"
-PRIVACY_NOTICE_VERSION="2"
+APP_VERSION="0.9.4-beta-estável"
+AUTHOR_LINKEDIN="https://www.linkedin.com/in/gabriel-santos-8667bb1b7/"
+AUTHOR_GITHUB="https://github.com/gsantosxd"
+AUTHOR_EMAIL="gsantosxd3@gmail.com"
+DONATION_PIX="27998886868"
+PRIVACY_NOTICE_VERSION="3"
+TERMS_OF_USE_VERSION="2"
 PCD_CONSENT_VERSION="1"
-PRIVACY_CONTACT="Consulte o arquivo PRIVACIDADE.md distribuído com o aplicativo"
+PRIVACY_CONTACT=f"{AUTHOR_EMAIL} | {AUTHOR_LINKEDIN}"
 APP_DIR=os.path.dirname(os.path.abspath(__file__))
-APP_DATA_VERSION="Data"
-LEGACY_APP_DATA_VERSIONS=("Beta0_9_0",)
+
+def resource_path(name):
+    """Localiza recursos tanto no código-fonte quanto no pacote PyInstaller."""
+    root=getattr(sys,"_MEIPASS",APP_DIR)
+    return os.path.join(root,name)
+APP_DATA_VERSION="BetaEstavel3"
+LEGACY_APP_DATA_VERSIONS=()
 if getattr(sys,"frozen",False):
     APP_DATA_ROOT=os.path.join(os.environ.get("LOCALAPPDATA",os.path.dirname(sys.executable)),"ToNoCorre")
     BASE_DIR=os.path.join(APP_DATA_ROOT,APP_DATA_VERSION)
@@ -37,6 +47,37 @@ CACHE_PATH=os.path.join(BASE_DIR,"cache_detalhes.json")
 SOURCE_RESULTS_PATH=os.path.join(BASE_DIR,"cache_resultados_fontes.json")
 LOG_PATH=os.path.join(BASE_DIR,"to_no_corre.log")
 BACKUP_DIR=os.path.join(BASE_DIR,"backups")
+
+def apply_windows_data_permissions():
+    """Garante acesso do usuário antes de abrir qualquer arquivo e restringe a pasta."""
+    if os.name!="nt" or not getattr(sys,"frozen",False):return False
+    domain=os.environ.get("USERDOMAIN","").strip();username=os.environ.get("USERNAME","").strip()
+    account=(domain+"\\"+username).strip("\\")
+    if not account:return False
+    try:
+        flags=getattr(subprocess,"CREATE_NO_WINDOW",0)
+        # Arquivos existentes recebem uma ACE efetiva (sem OI/CI). Aplicar
+        # somente OI/CI com /T os deixaria com uma regra apenas herdável, sem
+        # acesso ao próprio arquivo na execução seguinte.
+        repair=subprocess.run([
+            "icacls",BASE_DIR,"/inheritance:r",
+            "/grant:r",f"{account}:F","*S-1-5-18:F","*S-1-5-32-544:F","/T","/C"
+        ],capture_output=True,text=True,timeout=20,creationflags=flags)
+        if repair.returncode!=0:return False
+        # A pasta recebe, adicionalmente, regras herdáveis para novos arquivos.
+        protect=subprocess.run([
+            "icacls",BASE_DIR,
+            "/grant",f"{account}:(OI)(CI)F",
+            "/grant","*S-1-5-18:(OI)(CI)F",
+            "/grant","*S-1-5-32-544:(OI)(CI)F","/C"
+        ],capture_output=True,text=True,timeout=20,creationflags=flags)
+        return protect.returncode==0
+    except Exception:
+        return False
+
+# A permissão precisa ser aplicada antes do RotatingFileHandler. Fazer isso
+# depois pode deixar o log aberto sem a nova ACL efetiva para a próxima execução.
+if getattr(sys,"frozen",False):apply_windows_data_permissions()
 
 def configure_logging():
     root=logging.getLogger()
@@ -104,27 +145,39 @@ Não há servidor próprio, telemetria nem venda de dados. Os arquivos permanece
 Serviços independentes
 Sites de vagas possuem suas próprias políticas de privacidade e passam a tratar os dados fornecidos durante a candidatura.
 
-Canal de privacidade: {PRIVACY_CONTACT}.
-Este canal deve ser definido antes da distribuição pública."""
+Canal de privacidade: {PRIVACY_CONTACT}."""
+
+TERMS_OF_USE=f"""Tô no Corre {APP_VERSION} — Termos de Uso (versão {TERMS_OF_USE_VERSION})
+
+1. Finalidade e fase beta
+O Tô no Corre é uma ferramenta gratuita em fase beta para auxiliar o próprio usuário a localizar, comparar e organizar vagas. Ele não é agência de emprego, recrutador ou representante dos sites consultados e não garante entrevista, contratação, disponibilidade ou exatidão dos anúncios.
+
+2. Conferência e candidatura
+Compatibilidade, modalidade, localização, salário, requisitos e datas são estimativas baseadas nas informações disponíveis. O usuário deve conferir o anúncio original antes de se candidatar. O aplicativo pode abrir páginas, preparar campos e anexos, mas a revisão e a decisão final de enviar uma candidatura são sempre do usuário.
+
+3. Fontes independentes
+Gupy, LinkedIn, Google, Indeed e as demais fontes são serviços independentes, sujeitos aos próprios termos, políticas, disponibilidade e limitações. A presença de uma marca ou link não indica parceria, patrocínio ou aprovação. Uma fonte pode alterar ou impedir o acesso sem aviso.
+
+4. Uso responsável
+O aplicativo destina-se a uso pessoal e lícito. O usuário não deve empregá-lo para sobrecarregar serviços, contornar controles de acesso, enviar candidaturas enganosas, tratar dados de outra pessoa sem autorização ou praticar atos que violem direitos e regras aplicáveis. Recursos automatizados devem permanecer sob supervisão humana.
+
+5. Dados e troca de usuário
+Os dados são mantidos localmente conforme o Aviso de Privacidade. Quem usar o mesmo computador para outra pessoa deve executar “Limpar tudo / trocar currículo” antes de carregar um novo currículo.
+
+6. Disponibilidade, alterações e encerramento
+Por se tratar de beta gratuito, funções podem apresentar falhas, mudar ou ficar temporariamente indisponíveis. Alterações relevantes destes termos ou do aviso de privacidade exigirão nova aceitação por versão. O usuário pode deixar de usar o aplicativo e apagar os dados locais a qualquer momento.
+
+7. Responsabilidade e direitos
+O desenvolvedor busca manter informações claras e medidas razoáveis de segurança, mas não controla anúncios, processos seletivos ou serviços externos. Nada nestes termos limita direitos ou responsabilidades que não possam ser afastados pela legislação aplicável.
+
+8. Contato
+E-mail: {AUTHOR_EMAIL}
+LinkedIn: {AUTHOR_LINKEDIN}
+GitHub: {AUTHOR_GITHUB}"""
 
 def protect_local_data_directory():
     """Restringe a pasta da edição ao usuário do Windows no aplicativo empacotado."""
-    if os.name!="nt" or not getattr(sys,"frozen",False):return False
-    domain=os.environ.get("USERDOMAIN","").strip();username=os.environ.get("USERNAME","").strip()
-    account=(domain+"\\"+username).strip("\\")
-    if not account:return False
-    try:
-        flags=getattr(subprocess,"CREATE_NO_WINDOW",0)
-        result=subprocess.run([
-            "icacls",BASE_DIR,"/inheritance:r",
-            "/grant:r",f"{account}:(OI)(CI)F",
-            "/grant:r","*S-1-5-18:(OI)(CI)F",
-            "/grant:r","*S-1-5-32-544:(OI)(CI)F","/T","/C"
-        ],capture_output=True,text=True,timeout=20,creationflags=flags)
-        return result.returncode==0
-    except Exception:
-        LOGGER.exception("Não foi possível restringir a pasta de dados")
-        return False
+    return apply_windows_data_permissions()
 
 if getattr(sys,"frozen",False):protect_local_data_directory()
 
@@ -190,14 +243,23 @@ SOURCE_RESULT_METRICS={}
 def source_search_signature(source,p):
     relevant={
         "source":source,
+        # A revisão invalida apenas caches do LinkedIn quando a estratégia de
+        # descoberta muda, sem obrigar as demais fontes a repetir consultas.
+        "collector_revision":2 if "linkedin" in norm(source) else 1,
         "gupy":p.get("consultas_gupy",[]),"linkedin":p.get("consultas_linkedin",[]),
         "google":p.get("consultas_google",[]),"english":p.get("consultas_ingles",[]),
         "cities":p.get("cidades_presencial",[]),"state":p.get("estado_local",""),
         "remote":bool(p.get("aceitar_remoto",True)),
-        "internships":bool(p.get("buscar_estagios",False)),
+        "internships":internship_search_mode(p),
+        "internship_areas":internship_selected_areas(p),
         "apprentice":bool(p.get("buscar_jovem_aprendiz",False)),
         "entry":bool(p.get("buscar_vagas_inicio_carreira",False)),
         "international":international_search_enabled(p),
+        # As fontes já devolvem resultados recortados pela idade. Portanto,
+        # caches criados para 7 dias não podem ser reutilizados numa busca de
+        # 60 dias, pois não contêm as vagas mais antigas que voltaram a valer.
+        "publication_age_days":int(p.get(
+            "idade_maxima_dias",p.get("idade_maxima_vaga_dias",60))),
     }
     raw=json.dumps(relevant,ensure_ascii=False,sort_keys=True,separators=(",",":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -420,7 +482,8 @@ def default_profile():
         "consultas_br":[],"consultas_gupy":[],"consultas_linkedin":[],"consultas_google":[],"consultas_ingles":[],
         "cidades_presencial":[],"cidades_presencial_hibrido":[],"estado_local":"",
         "localidades_excluidas":[],
-        "aceitar_remoto":True,"buscar_estagios":False,"buscar_vagas_pcd":False,
+        "aceitar_remoto":True,"buscar_estagios":False,"modo_estagios":"nao_buscar",
+        "areas_estagio":[],"areas_estagio_manual":False,"buscar_vagas_pcd":False,
         "consentimento_pcd_versao":"","consentimento_pcd_em":"",
         "nivel_ingles":"Não informado","nivel_ingles_manual":False,
         "buscar_vagas_internacionais":False,"preferencia_internacional_manual":False,
@@ -438,6 +501,12 @@ def load_profile():
         profile=default_profile();save_json_file(PROFILE_PATH,profile)
     else:
         changed=False
+        if "modo_estagios" not in profile:
+            profile["modo_estagios"]="incluir" if profile.get("buscar_estagios",False) else "nao_buscar";changed=True
+        if "areas_estagio" not in profile:
+            profile["areas_estagio"]=list(profile.get("cursos_curriculo_detectados",[]));changed=True
+        if "areas_estagio_manual" not in profile:
+            profile["areas_estagio_manual"]=False;changed=True
         if "buscar_vagas_pcd" not in profile:
             # Compatibilidade com perfis anteriores, que armazenavam a opção invertida.
             profile["buscar_vagas_pcd"]=not bool(profile.get("descartar_vagas_exclusivas_pcd",True));changed=True
@@ -453,6 +522,69 @@ def load_profile():
             profile["nivel_ingles_manual"]=False;changed=True
         if changed:save_json_file(PROFILE_PATH,profile)
     return profile
+
+INTERNSHIP_MODE_LABELS={
+    "nao_buscar":"Não buscar estágios",
+    "incluir":"Estágios junto às demais vagas",
+    "somente":"Somente estágios",
+}
+
+def internship_search_mode(p):
+    value=norm((p or {}).get("modo_estagios","" )).replace(" ","_")
+    aliases={"nao_buscar":"nao_buscar","não_buscar":"nao_buscar","incluir":"incluir",
+             "junto":"incluir","somente":"somente","somente_estagios":"somente"}
+    # Aceita alterações feitas pelo campo booleano legado durante a transição.
+    if value=="nao_buscar" and (p or {}).get("buscar_estagios",False):return "incluir"
+    if value in aliases:return aliases[value]
+    return "incluir" if (p or {}).get("buscar_estagios",False) else "nao_buscar"
+
+def internship_selected_areas(p):
+    selected=(p or {}).get("areas_estagio",[])
+    if not isinstance(selected,list):selected=[]
+    selected=[clean(value).strip() for value in selected if clean(value).strip()]
+    return list(dict.fromkeys(selected or (p or {}).get("cursos_curriculo_detectados",[])))
+
+def is_internship_query(value):
+    return bool(re.search(r"\b(?:estagio|estagiari[oa]|intern|internship)\b",semantic_norm(value)))
+
+def internship_area_queries(areas):
+    portuguese=[];english=[]
+    families=[
+        ({"direito"},["direito","jurídico","contencioso","contratos","direito trabalhista"],
+         ["legal intern","law internship"]),
+        ({"ads","analise e desenvolvimento de sistemas","tecnologia da informacao","sistemas de informacao",
+          "ciencia da computacao","engenharia de software"},
+         ["TI","ADS","desenvolvimento de sistemas","desenvolvimento de software","programação",
+          "suporte técnico","infraestrutura TI","dados"],
+         ["IT intern","software development intern","technical support internship","data intern"]),
+        ({"administracao","administracao de empresas"},
+         ["administração","administrativo","financeiro","comercial","operações"],
+         ["administrative intern","finance intern","operations internship"]),
+        ({"ciencias contabeis","contabilidade"},["contabilidade","contábil","fiscal","auditoria","financeiro"],
+         ["accounting intern","audit internship","finance intern"]),
+        ({"gestao de recursos humanos","gestao de rh","recursos humanos","psicologia"},
+         ["recursos humanos","RH","recrutamento e seleção","departamento pessoal"],
+         ["human resources intern","recruiting intern"]),
+        ({"marketing","publicidade e propaganda","publicidade","comunicacao social"},
+         ["marketing","marketing digital","comunicação","conteúdo","mídias sociais"],
+         ["marketing intern","communications internship","social media intern"]),
+        ({"engenharia civil"},["engenharia civil","obras","projetos","orçamento de obras","planejamento de obras"],
+         ["civil engineering intern"]),
+        ({"enfermagem"},["enfermagem","assistência em saúde","saúde ocupacional"],["nursing intern"]),
+        ({"pedagogia"},["pedagogia","educação","apoio pedagógico"],["education intern"]),
+        ({"design"},["design","design gráfico","UX","UI"],["design intern","UX intern","UI intern"]),
+        ({"logistica"},["logística","suprimentos","transportes","estoque"],["logistics intern","supply chain intern"]),
+    ]
+    for area in areas:
+        normalized=semantic_norm(area)
+        family=next((item for item in families if normalized in item[0]),None)
+        if family:
+            portuguese += [f"estágio {term}" for term in [area]+family[1]]
+            english += family[2]
+        else:
+            portuguese += [f"estágio {area}",f"estagiário {area}",f"programa de estágio {area}"]
+            english += [f"{area} intern",f"{area} internship"]
+    return list(dict.fromkeys(portuguese)),list(dict.fromkeys(english))
 
 def read_cv():
     try:
@@ -527,6 +659,9 @@ def cv_profile_summary(text):
 
 def adapt_profile_to_cv(p,text):
     prof=cv_profile_summary(text); n=norm(text); queries=[];english_queries=[]
+    if not p.get("areas_estagio_manual",False):
+        p["areas_estagio"]=list(prof["courses"])
+    selected_internship_areas=internship_selected_areas(p)
     language=detect_cv_language(text)
     detected_english=detect_english_level(text,language)
     if not p.get("nivel_ingles_manual",False):p["nivel_ingles"]=detected_english
@@ -550,7 +685,9 @@ def adapt_profile_to_cv(p,text):
     # do idioma para a triagem. Textos mistos/indefinidos nao recebem essa inferencia.
     if language=="Inglês" and "Inglês fluente" not in prof["skills"]:
         prof["skills"].append("Inglês fluente")
-    include_internships=bool(p.get("buscar_estagios",False))
+    internship_mode=internship_search_mode(p)
+    include_internships=internship_mode!="nao_buscar"
+    only_internships=internship_mode=="somente"
     if "Jurídico" in prof["areas"]:
         # A busca pública da Gupy é muito literal para cargos compostos. Termos
         # amplos descobrem os anúncios; curso, localização e compatibilidade
@@ -577,11 +714,13 @@ def adapt_profile_to_cv(p,text):
                     "assistente financeiro","backoffice"]
         english_queries += ["administrative assistant","office assistant","operations assistant",
                             "back office assistant","junior administrative analyst","contract administrator"]
+        if include_internships:queries += ["estágio administrativo","estágio administração","estágio operações"]
         if include_internships:english_queries += ["administrative intern","operations internship"]
     if "Atendimento" in prof["areas"]:
         queries += ["atendimento ao cliente","assistente de atendimento","analista de atendimento júnior"]
         english_queries += ["customer service","customer support","customer success",
                             "client services assistant","support specialist"]
+        if include_internships:queries += ["estágio atendimento","estágio suporte ao cliente"]
         if include_internships:english_queries += ["customer service intern"]
     if broad_entry_search:
         queries += ["auxiliar administrativo","atendente de loja","operador de caixa",
@@ -609,6 +748,13 @@ def adapt_profile_to_cv(p,text):
     for course in prof["courses"][:2]:
         if include_internships:queries.append(f"estágio {course}")
         queries += [f"assistente {course}",f"analista júnior {course}"]
+    if include_internships and selected_internship_areas:
+        focused_pt,focused_en=internship_area_queries(selected_internship_areas)
+        queries=[query for query in queries if not is_internship_query(query)]+focused_pt
+        english_queries=[query for query in english_queries if not is_internship_query(query)]+focused_en
+    if only_internships and not any(is_internship_query(query) for query in queries):
+        useful=[word for word in prof["keywords"] if len(word)>=5][:2]
+        queries=["estágio"]+[f"estágio {word}" for word in useful]
     if not queries:
         useful=[word for word in prof["keywords"] if len(word)>=5][:4]
         queries=[f"assistente {word}" for word in useful[:2]]+[f"analista júnior {word}" for word in useful[2:]]
@@ -623,6 +769,12 @@ def adapt_profile_to_cv(p,text):
     if "Tecnologia / TI" in prof["areas"]:legacy+=motors.get("estagio_ads",[])[:10]
     if "Administrativo" in prof["areas"] or "Atendimento" in prof["areas"]:legacy+=motors.get("geral",[])[:14]
     previous=list(p.get("consultas_br",[]))+list(p.get("consultas_gupy",[]))
+    if selected_internship_areas and include_internships:
+        # Uma nova seleção de áreas invalida termos de estágio herdados. Vagas
+        # comuns continuam preservadas apenas no modo misto.
+        previous=[query for query in previous if not is_internship_query(query)]
+        legacy=[query for query in legacy if not is_internship_query(query)]
+        if only_internships:previous=[];legacy=[]
     primary=[valid_query(x) for x in queries+previous+legacy]
     # Somente a escolha explícita Fluente reserva consultas para cargos em inglês.
     # Nos demais níveis, toda a capacidade das fontes fica disponível ao mercado nacional.
@@ -639,14 +791,14 @@ def adapt_profile_to_cv(p,text):
         for index in range(max(len(primary),len(english))):
             if index<len(primary) and primary[index]:combined.append(primary[index])
             if index<len(english) and english[index]:combined.append(english[index])
-    def internship_query(value):
-        normalized=semantic_norm(value)
-        return "estagio" in normalized or "estagiario" in normalized
-    if not include_internships:combined=[x for x in combined if not internship_query(x)]
+    if only_internships:combined=[x for x in combined if is_internship_query(x)]
+    elif not include_internships:combined=[x for x in combined if not is_internship_query(x)]
     combined=list(dict.fromkeys(x for x in combined if x))
     english_norms={norm(value) for value in english if value}
     saved_pt=[valid_query(x) for x in p.get("consultas_linkedin",[])
               if valid_query(x) and norm(valid_query(x)) not in english_norms]
+    if selected_internship_areas and include_internships:
+        saved_pt=[query for query in saved_pt if not is_internship_query(query)]
     pt_pool=[valid_query(x) for x in queries+legacy+saved_pt]
     linkedin=[]
     if language=="Português":
@@ -655,23 +807,32 @@ def adapt_profile_to_cv(p,text):
         for index in range(max(len(pt_pool),len(english))):
             if index<len(pt_pool) and pt_pool[index]:linkedin.append(pt_pool[index])
             if index<len(english) and english[index]:linkedin.append(english[index])
-    if not include_internships:linkedin=[x for x in linkedin if not internship_query(x)]
+    if only_internships:linkedin=[x for x in linkedin if is_internship_query(x)]
+    elif not include_internships:linkedin=[x for x in linkedin if not is_internship_query(x)]
     linkedin=list(dict.fromkeys(x for x in linkedin if x))
     p["consultas_br"]=combined[:60 if broad_entry_search else 45]
     p["consultas_gupy"]=combined[:55 if broad_entry_search else 40]
     p["consultas_linkedin"]=linkedin[:45 if broad_entry_search else 35]
+    p["consultas_vagas_gupy"]=[query for query in combined if not is_internship_query(query)][:55 if broad_entry_search else 40]
+    p["consultas_estagio_gupy"]=[query for query in combined if is_internship_query(query)][:40]
+    p["consultas_vagas_linkedin"]=[query for query in linkedin if not is_internship_query(query)][:45 if broad_entry_search else 35]
+    p["consultas_estagio_linkedin"]=[query for query in linkedin if is_internship_query(query)][:35]
     p["consultas_ingles"]=list(dict.fromkeys(english))[:20]
     english_set={norm(query) for query in english}
     search_places=[]
-    if broad_entry_search:
+    if (broad_entry_search or only_internships):
         state_code=str(p.get("estado_local","") or "").strip().upper()
         search_places=[" ".join(x for x in (norm(city).title(),state_code) if x)
                        for city in p.get("cidades_presencial",[]) if norm(city)]
     google_queries=[]
-    for index,query in enumerate(combined[:15 if broad_entry_search else 12]):
+    google_base_limit=24 if only_internships else (15 if broad_entry_search else 12)
+    for index,query in enumerate(combined[:google_base_limit]):
         suffix="jobs Brazil" if norm(query) in english_set else "vagas Brasil"
         place=f' "{search_places[index%len(search_places)]}"' if search_places else ""
         google_queries.append(f'"{query}" {suffix}{place}')
+    if only_internships and p.get("aceitar_remoto",True):
+        for query in combined[:8]:
+            google_queries.append(f'"{query}" vagas remoto Brasil')
     if broad_entry_search:
         generic_queries=[
             '"sem experiência" "ensino médio" vagas Brasil',
@@ -683,7 +844,18 @@ def adapt_profile_to_cv(p,text):
         for index,query in enumerate(generic_queries):
             place=f' "{search_places[index%len(search_places)]}"' if search_places else ""
             google_queries.append(query+place)
-    p["consultas_google"]=list(dict.fromkeys(google_queries))[:20 if broad_entry_search else 12]
+    google_cap=32 if only_internships else (20 if broad_entry_search else 12)
+    p["consultas_google"]=list(dict.fromkeys(google_queries))[:google_cap]
+    p["consultas_vagas_google"]=[query for query in p["consultas_google"]
+                                 if not is_internship_query(query)][:20 if broad_entry_search else 12]
+    stage_google=[]
+    for index,query in enumerate([value for value in combined if is_internship_query(value)][:24]):
+        place=f' "{search_places[index%len(search_places)]}"' if search_places else ""
+        stage_google.append(f'"{query}" vagas Brasil{place}')
+    if p.get("aceitar_remoto",True):
+        stage_google += [f'"{query}" vagas remoto Brasil'
+                         for query in [value for value in combined if is_internship_query(value)][:8]]
+    p["consultas_estagio_google"]=list(dict.fromkeys(stage_google))[:32]
     p["areas_curriculo_detectadas"]=prof["areas"]
     p["competencias_curriculo_detectadas"]=prof["skills"]
     p["termos_curriculo_detectados"]=prof["keywords"]
@@ -917,14 +1089,32 @@ def fetch_linkedin(p):
     # A consulta externa recebe uma chave canônica. Assim, "São Paulo" e
     # "sao paulo" produzem exatamente a mesma busca; a grafia do usuário é preservada no perfil.
     state_search=norm(state_label).title()
-    # Replica a estratégia de maior alcance da Beta: uma busca remota nacional e
-    # uma busca local baseada na cidade principal. As demais cidades continuam
-    # sendo aceitas pela validação interna, sem multiplicar chamadas e provocar
-    # limitação temporária do endpoint público.
+    # Empregos comuns preservam a estratégia econômica da Beta (cidade principal).
+    # Em modo somente estágios, porém, cada cidade configurada precisa ser
+    # consultada: a busca estadual do LinkedIn frequentemente devolve resultados
+    # de outros estados e omite oportunidades locais. O filtro geográfico interno
+    # continua sendo a autoridade final.
     main_city=norm(cities[0]).title() if cities and norm(cities[0]) else ""
     local_query=", ".join(x for x in [main_city,state_search,"Brazil"] if x) or "Brazil"
+    internship_only=internship_search_mode(p)=="somente"
+    accepts_remote=bool(p.get("aceitar_remoto",p.get("aceita_remoto",True)))
+    internship_locations=[]
+    if internship_only:
+        for city in cities:
+            city_search=norm(city).title()
+            if city_search:
+                internship_locations.append(", ".join(
+                    x for x in (city_search,state_search,"Brazil") if x))
+        if state_search:internship_locations.append(", ".join((state_search,"Brazil")))
+        internship_locations=list(dict.fromkeys(internship_locations)) or [local_query]
     for q in terms:
-        searches=[(True,"Brazil",(0,25)),(False,local_query,(0,25))]
+        if internship_only:
+            # Locais primeiro: vagas remotas não ocupam as primeiras posições
+            # que serão enriquecidas com descrição e modalidade.
+            searches=[(False,loc,(0,)) for loc in internship_locations]
+            if accepts_remote:searches.append((True,"Brazil",(0,25)))
+        else:
+            searches=[(True,"Brazil",(0,25)),(False,local_query,(0,25))]
         for remote,loc,starts in searches:
             for start in starts:
                 try: html=linkedin_search_html(q,remote,loc,start)
@@ -963,7 +1153,8 @@ def fetch_linkedin(p):
 
 def source_rank(name,p=None):
     name=norm(name)
-    order=["gupy","linkedin","indeed/google","google","remotive","jobicy","himalayas","remote landers",
+    order=["gupy","linkedin","ciee/google","nube/google","iel/google","eureca/google",
+           "companhia de estagios/google","indeed/google","google","remotive","jobicy","himalayas","remote landers",
            "remote game jobs","work with indies","hitmarker/google","vagas em games/google"]
     if p:
         order=[norm(x) for x in p.get("fonte_prioridade",order)]
@@ -1201,6 +1392,21 @@ def fetch_google(p,site=None,source_name="Google",max_queries=12,max_results=7,m
             out.append(j)
             if len(out)>=max_jobs:return out
     return out
+
+def fetch_internship_portals(p):
+    """Descobre vagas em portais oficiais sem acessar áreas autenticadas."""
+    portals=[
+        ("portal.ciee.org.br/quero-uma-vaga","CIEE/Google"),
+        ("nube.com.br/estudantes","Nube/Google"),
+        ("ielcarreiras.com.br/oportunidades","IEL/Google"),
+        ("eureca.me","Eureca/Google"),
+        ("ciadeestagios.com.br/vagas","Companhia de Estágios/Google"),
+    ]
+    jobs=[]
+    for domain,source in portals:
+        try:jobs += fetch_google(p,domain,source,max_queries=6,max_results=5,max_jobs=30)
+        except Exception:LOGGER.exception("Falha ao consultar portal público de estágio: %s",domain)
+    return dedupe_multisource(jobs,p)
 
 def fetch_remotive(p):
     out=[]
@@ -1773,7 +1979,9 @@ def vacancy_date_ok(job,p):
     age=publication_age_days(job)
     if age is None:return True,None
 
-    max_days=int(p.get("idade_maxima_vaga_dias",60))
+    # `idade_maxima_dias` é o campo atual da tela; o nome mais longo é
+    # mantido apenas para compatibilidade com perfis antigos.
+    max_days=int(p.get("idade_maxima_dias",p.get("idade_maxima_vaga_dias",60)))
     return age<=max_days,age
 
 
@@ -1849,7 +2057,7 @@ def internship_course_status(job,p=None):
     if not is_intern(job): return ""
 
     if p:
-        courses=profile_courses(p)
+        courses=[norm(course) for course in internship_selected_areas(p)]
         if courses:
             # O próprio título pode declarar uma formação incompatível sem usar
             # palavras como "cursando" ou "graduação" na descrição.
@@ -1939,7 +2147,11 @@ def hard_filter(job,p):
     if is_apprentice(job) and not p.get("buscar_jovem_aprendiz",False):
         return False,"Jovem Aprendiz desativado pelo usuário"
 
-    if is_intern(job) and not p.get("buscar_estagios",True):
+    internship_mode=internship_search_mode(p)
+    if internship_mode=="somente" and not is_intern(job):
+        return False,"modo somente estágios"
+
+    if is_intern(job) and internship_mode=="nao_buscar":
         return False,"estágio desativado pelo usuário"
 
     if is_intern(job):
@@ -2311,8 +2523,8 @@ def jobs_query(view="todas",search=""):
             clauses.append("(modalidade LIKE 'Presencial%' OR modalidade LIKE 'Híbrido%')")
             clauses.append("COALESCE(categoria,'') NOT LIKE 'Estágio%'")
     if search.strip():
-        clauses.append("(titulo LIKE ? OR empresa LIKE ? OR descricao LIKE ?)")
-        value="%"+search.strip()+"%";params.extend([value,value,value])
+        clauses.append("(titulo LIKE ? OR empresa LIKE ? OR descricao LIKE ? OR local LIKE ? OR modalidade LIKE ? OR fonte LIKE ?)")
+        value="%"+search.strip()+"%";params.extend([value]*6)
     if clauses:sql+=" WHERE "+" AND ".join(clauses)
     sql+=" ORDER BY CASE decisao WHEN 'APROVADA' THEN 0 ELSE 1 END,score DESC,id DESC"
     return sql,params
@@ -2329,7 +2541,7 @@ class App(tk.Tk):
         except Exception:LOGGER.exception("Não foi possível criar o backup automático")
         self.geometry("1420x820")
         self.minsize(1100,700)
-        self.configure(bg="#0d1117");self.geometry("1450x820");self.minsize(1150,680)
+        self.configure(bg="#141922");self.geometry("1450x820");self.minsize(1150,680)
         if requests is None or BeautifulSoup is None:
             messagebox.showerror("Dependências","Execute iniciar.bat para instalar requests e beautifulsoup4.")
         self.p=load_profile();self.cv=read_cv();self.conn=connect_database(DB_PATH);self.current=None
@@ -2339,7 +2551,7 @@ class App(tk.Tk):
         self.shutdown_event=threading.Event();self.worker_threads=set();self.worker_lock=threading.Lock()
         self.db();self.load_feedback_profile();self.migrate_v19();self.migrate_v23();self.migrate_v24();self.migrate_v25();self.migrate_v26();self.migrate_v27();self.ui()
         self.apply_pcd_preference(pcd_vacancies_enabled(self.p))
-        self.apply_internship_preference(bool(self.p.get("buscar_estagios",True)))
+        self.apply_internship_mode(internship_search_mode(self.p))
         self.apply_apprentice_preference(bool(self.p.get("buscar_jovem_aprendiz",False)))
         self.apply_international_preference(international_search_enabled(self.p))
         self.apply_excluded_locations()
@@ -2463,7 +2675,8 @@ class App(tk.Tk):
             self.conn.execute("INSERT OR REPLACE INTO app_meta(chave,valor) VALUES(?,?)",(key,str(value)))
 
     def privacy_notice_accepted(self):
-        return self.meta_get("aviso_privacidade_versao")==PRIVACY_NOTICE_VERSION
+        return (self.meta_get("aviso_privacidade_versao")==PRIVACY_NOTICE_VERSION and
+                self.meta_get("termos_uso_versao")==TERMS_OF_USE_VERSION)
 
     def pcd_consent_valid(self):
         return (self.p.get("consentimento_pcd_versao")==PCD_CONSENT_VERSION
@@ -2500,24 +2713,80 @@ class App(tk.Tk):
         if not self.cv.strip():self.after(150,self.edit_profile)
 
     def show_privacy_notice(self,required=False):
-        win,created=self.managed_window("privacidade","Privacidade e dados", "720x650",modal=True)
+        win,created=self.managed_window("privacidade","Privacidade e Termos de Uso", "760x680",modal=True)
         if not created:return
         body=ttk.Frame(win,padding=18);body.pack(fill="both",expand=True)
-        ttk.Label(body,text="Privacidade e controle dos seus dados",font=("Segoe UI",17,"bold")).pack(anchor="w")
+        ttk.Label(body,text="Privacidade e Termos de Uso",font=("Segoe UI",17,"bold")).pack(anchor="w")
         ttk.Label(body,text=f"Versão do aplicativo: {APP_VERSION}",style="Muted.Panel.TLabel").pack(anchor="w",pady=(2,10))
         text_box=tk.Text(body,wrap="word",bg=self.colors["white"],fg=self.colors["ink"],
                          insertbackground=self.colors["ink"],relief="flat",padx=12,pady=12)
-        text_box.insert("1.0",PRIVACY_NOTICE);text_box.configure(state="disabled");text_box.pack(fill="both",expand=True)
+        combined_notice=PRIVACY_NOTICE+"\n\n"+("="*68)+"\n\n"+TERMS_OF_USE
+        text_box.insert("1.0",combined_notice);text_box.configure(state="disabled");text_box.pack(fill="both",expand=True)
         buttons=ttk.Frame(body);buttons.pack(fill="x",pady=(12,0))
         if required:
             def accept():
                 self.meta_set("aviso_privacidade_versao",PRIVACY_NOTICE_VERSION)
                 self.meta_set("aviso_privacidade_aceito_em",datetime.now(timezone.utc).isoformat(timespec="seconds"))
+                self.meta_set("termos_uso_versao",TERMS_OF_USE_VERSION)
+                self.meta_set("termos_uso_aceito_em",datetime.now(timezone.utc).isoformat(timespec="seconds"))
                 win._managed_close();self.continue_after_privacy()
             ttk.Button(buttons,text="Sair",style="Danger.TButton",command=self.close_app).pack(side="left")
             ttk.Button(buttons,text="Aceito e continuar",style="Primary.TButton",command=accept).pack(side="right")
         else:
             ttk.Button(buttons,text="Fechar",style="Primary.TButton",command=win._managed_close).pack(side="right")
+
+    def show_credits(self):
+        win,created=self.managed_window("creditos","Créditos e apoio", "780x650")
+        if not created:return
+        body=ttk.Frame(win,padding=22);body.pack(fill="both",expand=True)
+        ttk.Label(body,text="Créditos",font=("Segoe UI",18,"bold")).pack(anchor="w")
+
+        content=ttk.Frame(body);content.pack(fill="both",expand=True,pady=(14,0))
+        thanks=ttk.Frame(content);thanks.pack(side="left",fill="both",expand=True,padx=(0,22))
+        message=("Agradeço imensamente a todos que apoiaram a ideia e testaram, "
+                 "me ajudando do início ao fim.\n\n"
+                 "Buiuz\nComedorDeTui\nTuieba\nArigher\nEnderionvel\nKamyh\nFolkss\nAkamui")
+        ttk.Label(thanks,text=message,wraplength=340,justify="left").pack(anchor="w",pady=(0,18))
+        contact=ttk.LabelFrame(thanks,text="Contato",padding=12);contact.pack(fill="x",anchor="w")
+        ttk.Label(contact,text=AUTHOR_EMAIL).pack(anchor="w",pady=(0,8))
+        contact_buttons=ttk.Frame(contact);contact_buttons.pack(fill="x")
+        ttk.Button(contact_buttons,text="LinkedIn",style="Soft.TButton",
+                   command=lambda:webbrowser.open(AUTHOR_LINKEDIN)).pack(side="left",padx=(0,6))
+        ttk.Button(contact_buttons,text="GitHub",style="Soft.TButton",
+                   command=lambda:webbrowser.open(AUTHOR_GITHUB)).pack(side="left")
+        def copy_email():
+            win.clipboard_clear();win.clipboard_append(AUTHOR_EMAIL);win.update()
+            email_status.set("E-mail copiado")
+        email_status=tk.StringVar(value="Copiar e-mail")
+        ttk.Button(contact,textvariable=email_status,command=copy_email).pack(fill="x",pady=(8,0))
+
+        support=ttk.LabelFrame(content,padding=16)
+        support.pack(side="right",fill="y")
+        ttk.Label(support,
+                  text="A cada R$ 7 doados, eu tomo uma cervejinha enquanto desejo a todos boa sorte na busca por uma nova oportunidade. 🍺",
+                  wraplength=280,justify="center").pack(pady=(0,10))
+        qr_path=resource_path("pix_qr_only.png")
+        try:
+            qr=tk.PhotoImage(file=qr_path)
+            factor=max(1,max(qr.width(),qr.height())//220)
+            if factor>1:qr=qr.subsample(factor,factor)
+            win.qr_image=qr
+            qr_frame=tk.Frame(support,bg="#2a3545",padx=7,pady=7)
+            qr_frame.pack(pady=5)
+            tk.Label(qr_frame,image=qr,bg="#2a3545",borderwidth=0).pack()
+        except Exception:
+            LOGGER.exception("Não foi possível exibir o QR Code PIX")
+            ttk.Label(support,text="QR Code indisponível nesta instalação.").pack(pady=12)
+        ttk.Label(support,text=f"Chave PIX: {DONATION_PIX}",font=("Segoe UI",10,"bold")).pack(pady=(8,5))
+        def copy_pix():
+            win.clipboard_clear();win.clipboard_append(DONATION_PIX);win.update()
+            copy_status.set("Chave PIX copiada")
+        copy_status=tk.StringVar(value="Copiar chave PIX")
+        ttk.Button(support,textvariable=copy_status,style="Primary.TButton",command=copy_pix).pack(fill="x")
+        ttk.Label(support,text="Contribuição totalmente opcional.",
+                  style="Muted.Panel.TLabel").pack(pady=(9,0))
+
+        ttk.Button(body,text="Fechar",command=win._managed_close).pack(anchor="e",pady=(14,0))
 
     def load_feedback_profile(self):
         profile = self.__dict__.get("p") if hasattr(self, "__dict__") else None
@@ -2666,11 +2935,23 @@ class App(tk.Tk):
         style=ttk.Style(self)
         try: style.theme_use("clam")
         except Exception: pass
-        colors={"bg":"#0d1117","panel":"#161b22","white":"#0f151d","ink":"#e6edf3",
-                "muted":"#9aa7b5","blue":"#3b82f6","blue_dark":"#93c5fd","blue_soft":"#243650",
-                "green":"#55b88a","green_soft":"#17362a","danger":"#ff8b94","line":"#30363d"}
+        colors={"bg":"#141922","panel":"#1b2230","white":"#202938","ink":"#e6eaf0",
+                "muted":"#aab4c3","blue":"#5b8def","blue_dark":"#b8d0ff","blue_soft":"#304a70",
+                "green":"#63c7a0","green_soft":"#203c35","danger":"#e58a96","line":"#344154"}
         self.colors=colors
         self.configure(bg=colors["bg"])
+        self.ui_images={}
+        def ui_photo(name,max_width,max_height):
+            try:
+                original=tk.PhotoImage(file=resource_path(name))
+                factor=max(1,(original.width()+max_width-1)//max_width,
+                           (original.height()+max_height-1)//max_height)
+                image=original.subsample(factor,factor) if factor>1 else original
+                self.ui_images[name]=image
+                return image
+            except Exception:
+                LOGGER.exception("Não foi possível carregar o recurso visual %s",name)
+                return None
         style.configure(".",font=("Segoe UI",10),background=colors["bg"],foreground=colors["ink"])
         style.configure("TFrame",background=colors["bg"])
         style.configure("TLabel",background=colors["bg"],foreground=colors["ink"])
@@ -2678,9 +2959,9 @@ class App(tk.Tk):
         style.configure("Panel.TLabel",background=colors["panel"],foreground=colors["ink"])
         style.configure("Muted.Panel.TLabel",background=colors["panel"],foreground=colors["muted"])
         style.configure("TButton",font=("Segoe UI",10,"bold"),padding=(15,10),borderwidth=0,
-                        background="#222b36",foreground=colors["ink"])
-        style.map("TButton",background=[("active","#2d3947"),("disabled","#171d25")],
-                  foreground=[("disabled","#687381")])
+                        background="#273244",foreground=colors["ink"])
+        style.map("TButton",background=[("active","#344258"),("disabled","#1b2230")],
+                  foreground=[("disabled","#758195")])
         style.configure("TEntry",fieldbackground=colors["white"],foreground=colors["ink"],bordercolor=colors["line"])
         style.configure("TCombobox",fieldbackground=colors["white"],background=colors["panel"],
                         foreground=colors["ink"],arrowcolor=colors["ink"])
@@ -2698,30 +2979,37 @@ class App(tk.Tk):
         style.configure("TLabelframe",background=colors["bg"],foreground=colors["ink"],bordercolor=colors["line"])
         style.configure("TLabelframe.Label",background=colors["bg"],foreground=colors["ink"])
         style.configure("Primary.TButton",background=colors["blue"],foreground="white",padding=(20,12))
-        style.map("Primary.TButton",background=[("active","#2563b9"),("disabled","#26364b")])
+        style.map("Primary.TButton",background=[("active","#709cf1"),("disabled","#33445f")])
         style.configure("Soft.TButton",background=colors["blue_soft"],foreground=colors["blue_dark"])
-        style.map("Soft.TButton",background=[("active","#304969")])
-        style.configure("Danger.TButton",background="#42242a",foreground=colors["danger"])
-        style.map("Danger.TButton",background=[("active","#573039")])
+        style.map("Soft.TButton",background=[("active","#3b5a86")])
+        style.configure("Danger.TButton",background="#4a2d36",foreground=colors["danger"])
+        style.map("Danger.TButton",background=[("active","#5c3742")])
         style.configure("Summary.TButton",background=colors["panel"],foreground=colors["muted"],
                         font=("Segoe UI",10),padding=(6,5),anchor="w",borderwidth=0)
         style.map("Summary.TButton",background=[("active",colors["blue_soft"])],foreground=[("active",colors["blue_dark"])])
         style.configure("Filter.TRadiobutton",background=colors["panel"],foreground=colors["ink"],
                         font=("Segoe UI",11,"bold"),padding=(8,9))
-        style.map("Filter.TRadiobutton",background=[("selected",colors["blue_soft"]),("active","#202a36")],
+        style.map("Filter.TRadiobutton",background=[("selected",colors["blue_soft"]),("active","#273244")],
                   foreground=[("selected",colors["blue_dark"])])
         style.configure("Treeview",font=("Segoe UI",10),rowheight=58,background=colors["white"],
                         fieldbackground=colors["white"],foreground=colors["ink"],borderwidth=0)
         style.configure("Treeview.Heading",font=("Segoe UI",9,"bold"),padding=(10,11),
-                        background="#202833",foreground=colors["muted"],relief="flat")
+                        background="#242e3d",foreground=colors["muted"],relief="flat")
         style.map("Treeview",background=[("selected",colors["blue_soft"])],foreground=[("selected",colors["ink"])])
-        style.configure("Status.Horizontal.TProgressbar",background=colors["blue"],troughcolor="#dfe7ed",borderwidth=0)
+        style.configure("Status.Horizontal.TProgressbar",background=colors["blue"],troughcolor=colors["panel"],borderwidth=0)
 
         header=tk.Frame(self,bg=colors["panel"],highlightbackground=colors["line"],highlightthickness=0)
         header.pack(fill="x")
-        brand=tk.Frame(header,bg=colors["panel"]);brand.pack(side="left",padx=(24,20),pady=15)
-        tk.Label(brand,text="Tô no Corre",font=("Segoe UI",23,"bold"),bg=colors["panel"],fg=colors["ink"]).pack(anchor="w")
-        tk.Label(brand,text="Vagas trabalhando por você.",font=("Segoe UI",10),bg=colors["panel"],fg=colors["muted"]).pack(anchor="w")
+        brand=tk.Frame(header,bg=colors["panel"]);brand.pack(side="left",padx=(18,20),pady=10)
+        header_mascot=ui_photo("mascote_busca_ui.png",88,88)
+        if header_mascot:
+            tk.Label(brand,image=header_mascot,bg=colors["panel"],borderwidth=0).pack(side="left",padx=(0,10))
+        brand_text=tk.Frame(brand,bg=colors["panel"]);brand_text.pack(side="left",anchor="center")
+        brand_line=tk.Frame(brand_text,bg=colors["panel"]);brand_line.pack(anchor="w")
+        tk.Label(brand_line,text="Tô no Corre",font=("Segoe UI",23,"bold"),bg=colors["panel"],fg=colors["ink"]).pack(side="left")
+        tk.Label(brand_line,text="BETA",font=("Segoe UI",8,"bold"),bg=colors["blue_soft"],fg=colors["blue_dark"],
+                 padx=7,pady=3).pack(side="left",padx=(9,0),pady=(5,0))
+        tk.Label(brand_text,text="Vagas trabalhando por você.",font=("Segoe UI",10),bg=colors["panel"],fg=colors["muted"]).pack(anchor="w")
         nav=ttk.Frame(header,style="Panel.TFrame");nav.pack(side="right",padx=20,pady=16)
         self.search_button=ttk.Button(nav,text="Buscar vagas",style="Primary.TButton",command=lambda:self.start_source("all"))
         self.search_button.pack(side="left",padx=4)
@@ -2730,30 +3018,69 @@ class App(tk.Tk):
         ttk.Button(nav,text="Candidatar",style="Soft.TButton",command=self.start_batch).pack(side="left",padx=4)
         ttk.Button(nav,text="Minhas candidaturas",command=self.show_applications).pack(side="left",padx=4)
         ttk.Button(nav,text="Configurações",command=self.edit_profile).pack(side="left",padx=4)
+        ttk.Button(nav,text="Créditos",command=self.show_credits).pack(side="left",padx=4)
 
         workspace=ttk.Frame(self,padding=(18,16,18,8));workspace.pack(fill="both",expand=True)
         sidebar=ttk.Frame(workspace,style="Panel.TFrame",padding=(14,16));sidebar.pack(side="left",fill="y",padx=(0,14))
-        ttk.Label(sidebar,text="MOSTRAR VAGAS",style="Muted.Panel.TLabel",font=("Segoe UI",9,"bold")).pack(anchor="w",padx=6,pady=(0,8))
+        sidebar_controls=ttk.Frame(sidebar,style="Panel.TFrame")
+        sidebar_controls.pack(side="top",fill="x")
+        ttk.Label(sidebar_controls,text="MOSTRAR VAGAS",style="Muted.Panel.TLabel",font=("Segoe UI",9,"bold")).pack(anchor="w",padx=6,pady=(0,8))
         self.view_mode=tk.StringVar(value="todas")
         for text,value in [("Todas","todas"),("Presencial","presencial"),("Remoto","remoto"),
                            ("Estágios","estagio"),("Jovem Aprendiz","aprendiz"),("Vagas PCD","pcd")]:
-            ttk.Radiobutton(sidebar,text=text,value=value,variable=self.view_mode,command=self.refresh,
+            ttk.Radiobutton(sidebar_controls,text=text,value=value,variable=self.view_mode,command=self.refresh,
                             style="Filter.TRadiobutton",width=17).pack(fill="x",pady=2)
-        ttk.Separator(sidebar).pack(fill="x",pady=14)
-        ttk.Label(sidebar,text="RESUMO",style="Muted.Panel.TLabel",font=("Segoe UI",9,"bold")).pack(anchor="w",padx=6,pady=(0,7))
+        ttk.Separator(sidebar_controls).pack(fill="x",pady=14)
+        ttk.Label(sidebar_controls,text="RESUMO",style="Muted.Panel.TLabel",font=("Segoe UI",9,"bold")).pack(anchor="w",padx=6,pady=(0,7))
         self.stat_rec=tk.StringVar(value="Recomendadas: 0")
         self.stat_rev=tk.StringVar(value="Vale conferir: 0")
         self.stat_app=tk.StringVar(value="Candidaturas: 0")
         self.stat_out=tk.StringVar(value="Fora do perfil: 0")
+        self.stat_model_pending=tk.StringVar(value="Modelo a confirmar: 0")
         self.stat_location_excluded=tk.StringVar(value="Localidades excluídas: 0")
         self.stat_discarded=tk.StringVar(value="Descartadas: 0")
         for var,command in [(self.stat_rec,lambda:self.set_view("recomendadas")),
                             (self.stat_rev,lambda:self.set_view("revisar")),
                             (self.stat_app,self.show_applications),(self.stat_out,self.show_discarded),
+                            (self.stat_model_pending,self.show_model_unconfirmed),
                             (self.stat_location_excluded,self.show_location_excluded),
                             (self.stat_discarded,self.show_manually_discarded)]:
-            ttk.Button(sidebar,textvariable=var,style="Summary.TButton",command=command).pack(fill="x",pady=1)
+            ttk.Button(sidebar_controls,textvariable=var,style="Summary.TButton",command=command).pack(fill="x",pady=1)
 
+        sidebar_mascot_large=ui_photo("mascote_sidebar_large_ui.png",190,190)
+        sidebar_mascot=ui_photo("mascote_sidebar_ui.png",168,168)
+        sidebar_mascot_medium=ui_photo("mascote_sidebar_medium_ui.png",112,112)
+        sidebar_mascot_small=ui_photo("mascote_sidebar_small_ui.png",80,80)
+        sidebar_mascot_label=tk.Label(sidebar,bg=colors["panel"],borderwidth=0)
+        sidebar_mascot_label.pack(side="bottom")
+
+        sidebar_mascot_resize_job=None
+        sidebar_mascot_current=None
+
+        def apply_sidebar_mascot_size():
+            nonlocal sidebar_mascot_resize_job,sidebar_mascot_current
+            sidebar_mascot_resize_job=None
+            available=sidebar.winfo_height()-sidebar_controls.winfo_reqheight()-4
+            choices=((190,sidebar_mascot_large),(168,sidebar_mascot),
+                     (112,sidebar_mascot_medium),(80,sidebar_mascot_small))
+            selected=next((image for size,image in choices if image and available>=size),None)
+            if selected is sidebar_mascot_current:return
+            sidebar_mascot_current=selected
+            sidebar_mascot_label.configure(image=selected or "")
+            sidebar_mascot_label.pack_configure(pady=(4,0) if selected else 0)
+
+        def resize_sidebar_mascot(event):
+            nonlocal sidebar_mascot_resize_job
+            if event.widget is not self:return
+            if sidebar_mascot_resize_job:
+                try:self.after_cancel(sidebar_mascot_resize_job)
+                except tk.TclError:pass
+            # Maximizar/restaurar emite vários eventos antes que os painéis
+            # internos recebam sua geometria definitiva.
+            sidebar_mascot_resize_job=self.after(120,apply_sidebar_mascot_size)
+
+        self.bind("<Configure>",resize_sidebar_mascot,add="+")
+        self.after_idle(apply_sidebar_mascot_size)
         main=ttk.Frame(workspace);main.pack(side="left",fill="both",expand=True)
         tools=ttk.Frame(main);tools.pack(fill="x",pady=(0,10))
         titlebox=ttk.Frame(tools);titlebox.pack(side="left")
@@ -2767,14 +3094,45 @@ class App(tk.Tk):
                  bg=colors["blue_soft"],fg=colors["blue_dark"]).pack(side="left",padx=(0,10),pady=7)
         self.search_animation_job=None;self.search_animation_frame=0
         self.q=tk.StringVar()
+        # Refina localmente qualquer aba sem repetir a consulta às fontes.
+        # O pequeno atraso evita reconstruir uma lista grande mais de uma vez
+        # quando várias teclas chegam juntas.
+        self.filter_refresh_job=None
+        def schedule_filter_refresh(*_args):
+            if self.filter_refresh_job:
+                try:self.after_cancel(self.filter_refresh_job)
+                except tk.TclError:pass
+            self.filter_refresh_job=self.after(180,self.refresh)
+        self.q.trace_add("write",schedule_filter_refresh)
         self.batch_selection={r[0] for r in self.conn.execute(
             "SELECT id FROM vagas WHERE selecionada_lote=1 AND status='Nova'").fetchall()}
         self.queue_action_text=tk.StringVar(value="Incluir na fila")
         ttk.Button(tools,textvariable=self.queue_action_text,style="Primary.TButton",
                    command=self.apply_batch_selection).pack(side="right",padx=(0,10))
+        filter_box=ttk.Frame(tools)
+        filter_box.pack(side="right",padx=(12,14))
+        ttk.Label(filter_box,text="Filtrar vagas:").pack(side="left",padx=(0,6))
+        filter_entry=ttk.Entry(filter_box,textvariable=self.q,width=32)
+        filter_entry.pack(side="left")
+        filter_entry.bind("<Escape>",lambda _event:self.q.set(""))
         self.update_queue_action()
 
+        self.empty_state=tk.Frame(main,bg=colors["panel"],highlightbackground=colors["line"],highlightthickness=1)
+        empty_text=tk.Frame(self.empty_state,bg=colors["panel"]);empty_text.pack(side="left",padx=20,pady=15)
+        tk.Label(empty_text,text="Comece pelo seu currículo",font=("Segoe UI",13,"bold"),
+                 bg=colors["panel"],fg=colors["ink"]).pack(anchor="w")
+        tk.Label(empty_text,text="Carregue um PDF, DOCX ou TXT. Os dados permanecem neste computador.",
+                 font=("Segoe UI",10),bg=colors["panel"],fg=colors["muted"]).pack(anchor="w",pady=(3,0))
+        ttk.Button(self.empty_state,text="Carregar currículo",style="Primary.TButton",
+                   command=self.edit_profile).pack(side="left",padx=(0,18),pady=13)
+        initial_mascots=ui_photo("mascotes_iniciais_ui.png",310,205)
+        if initial_mascots:
+            tk.Label(self.empty_state,image=initial_mascots,bg=colors["panel"],
+                     borderwidth=0).pack(side="right",padx=12,pady=8)
+
         pane=ttk.Panedwindow(main,orient="horizontal");pane.pack(fill="both",expand=True)
+        self.main_pane=pane
+        if not self.cv.strip():self.empty_state.pack(fill="x",pady=(0,10),before=pane)
         left=ttk.Frame(pane,style="Panel.TFrame",padding=1)
         right=ttk.Frame(pane,style="Panel.TFrame",padding=(16,14))
         pane.add(left,weight=3);pane.add(right,weight=2)
@@ -2795,16 +3153,48 @@ class App(tk.Tk):
         self.tree.bind("<<TreeviewSelect>>",self.select);self.tree.bind("<Double-1>",lambda e:self.open_job())
 
         detail_head=ttk.Frame(right,style="Panel.TFrame");detail_head.pack(fill="x")
-        ttk.Label(detail_head,text="DETALHES DA VAGA",style="Muted.Panel.TLabel",font=("Segoe UI",9,"bold")).pack(side="left")
-        ttk.Button(detail_head,text="Descartar",style="Danger.TButton",
-                   command=self.discard_current).pack(side="right",padx=(5,0))
-        ttk.Button(detail_head,text="Ver vaga",command=self.open_job).pack(side="right")
+        detail_head.columnconfigure(0,weight=1);detail_head.columnconfigure(1,weight=1)
+        detail_caption=ttk.Label(detail_head,text="DETALHES DA VAGA",style="Muted.Panel.TLabel",
+                                 font=("Segoe UI",9,"bold"))
+        detail_caption.grid(row=0,column=0,columnspan=2,sticky="w",pady=(0,5))
+        open_job_button=ttk.Button(detail_head,text="Ver vaga",command=self.open_job)
+        discard_job_button=ttk.Button(detail_head,text="Descartar",style="Danger.TButton",
+                                      command=self.discard_current)
+        open_job_button.grid(row=1,column=0,sticky="ew",padx=(0,3))
+        discard_job_button.grid(row=1,column=1,sticky="ew",padx=(3,0))
         self.tv=tk.StringVar(value="Selecione uma vaga")
-        ttk.Label(right,textvariable=self.tv,style="Panel.TLabel",font=("Segoe UI",15,"bold"),wraplength=480).pack(anchor="w",pady=(5,3))
+        detail_title=ttk.Label(right,textvariable=self.tv,style="Panel.TLabel",font=("Segoe UI",15,"bold"),wraplength=480)
+        detail_title.pack(anchor="w",pady=(8,3))
         self.meta=tk.StringVar(value="Escolha uma vaga na lista ao lado.")
-        ttk.Label(right,textvariable=self.meta,style="Muted.Panel.TLabel",wraplength=480).pack(anchor="w")
+        detail_meta=ttk.Label(right,textvariable=self.meta,style="Muted.Panel.TLabel",wraplength=480)
+        detail_meta.pack(anchor="w")
         self.data_quality=tk.StringVar(value="")
-        ttk.Label(right,textvariable=self.data_quality,style="Muted.Panel.TLabel",wraplength=480).pack(anchor="w",pady=(2,12))
+        detail_quality=ttk.Label(right,textvariable=self.data_quality,style="Muted.Panel.TLabel",wraplength=480)
+        detail_quality.pack(anchor="w",pady=(2,12))
+
+        detail_layout={"width":None,"stacked":None}
+        def resize_detail_panel(event):
+            # No Windows, <Configure> também pode ser repetido enquanto a janela
+            # é arrastada, mesmo sem alteração da largura do painel. Reaplicar
+            # wrap e grid em cada evento provoca relayouts visíveis e movimento
+            # engasgado. Ignora eventos geometricamente idênticos.
+            width=max(1,int(event.width))
+            if detail_layout["width"]==width:return
+            detail_layout["width"]=width
+            available=max(80,width-32)
+            detail_title.configure(wraplength=available)
+            detail_meta.configure(wraplength=available)
+            detail_quality.configure(wraplength=available)
+            stacked=width<245
+            if detail_layout["stacked"]==stacked:return
+            detail_layout["stacked"]=stacked
+            if stacked:
+                open_job_button.grid_configure(row=1,column=0,columnspan=2,padx=0,pady=(0,4))
+                discard_job_button.grid_configure(row=2,column=0,columnspan=2,padx=0)
+            else:
+                open_job_button.grid_configure(row=1,column=0,columnspan=1,padx=(0,3),pady=0)
+                discard_job_button.grid_configure(row=1,column=1,columnspan=1,padx=(3,0))
+        right.bind("<Configure>",resize_detail_panel,add="+")
 
         def detail_section(label,height,expand=False):
             ttk.Label(right,text=label,style="Panel.TLabel",font=("Segoe UI",10,"bold")).pack(anchor="w",pady=(3,4))
@@ -2823,6 +3213,8 @@ class App(tk.Tk):
         tk.Label(status,textvariable=self.info,font=("Segoe UI",9),bg=colors["panel"],fg=colors["muted"]).pack(side="left",padx=18,pady=7)
         tk.Label(status,text=f"{APP_TITLE} • {APP_VERSION}",font=("Segoe UI",9),
                  bg=colors["panel"],fg=colors["muted"]).pack(side="right",padx=(4,18),pady=7)
+        tk.Label(status,text="Dados armazenados localmente",font=("Segoe UI",9),
+                 bg=colors["panel"],fg=colors["muted"]).pack(side="right",padx=(8,10),pady=7)
         self.prog=ttk.Progressbar(status,mode="indeterminate",length=120,style="Status.Horizontal.TProgressbar")
         self.prog.pack(side="right",padx=(18,4),pady=9)
 
@@ -2878,7 +3270,7 @@ class App(tk.Tk):
                     return current,False
             except tk.TclError:pass
         win=tk.Toplevel(self);win.title(title);win.transient(self)
-        win.configure(bg=getattr(self,"colors",{}).get("bg","#0d1117"))
+        win.configure(bg=getattr(self,"colors",{}).get("bg","#141922"))
         width,height=(int(x) for x in geometry.lower().split("x")[:2])
         self.center_window(win,width,height)
         self.open_windows[key]=win
@@ -2973,9 +3365,10 @@ class App(tk.Tk):
         # preferências atuais e melhorias do mecanismo, sem exigir novo upload.
         adapt_profile_to_cv(self.p,self.cv);save_json_file(PROFILE_PATH,self.p)
         self.reactivate_searchable_jobs()
+        self.apply_publication_age_preference()
         self.separate_outside_region_jobs()
         self.apply_pcd_preference(pcd_vacancies_enabled(self.p))
-        self.apply_internship_preference(bool(self.p.get("buscar_estagios",True)))
+        self.apply_internship_mode(internship_search_mode(self.p))
         self.apply_apprentice_preference(bool(self.p.get("buscar_jovem_aprendiz",False)))
         self.apply_international_preference(international_search_enabled(self.p))
         self.apply_excluded_locations()
@@ -2989,38 +3382,84 @@ class App(tk.Tk):
 
     def collect(self,src):
         entry_mode=bool(self.p.get("buscar_vagas_inicio_carreira",False))
-        google_limit=20 if entry_mode else 12
-        google_jobs=100 if entry_mode else 60
-        cached=lambda name,fn,hours=1,limit=600:persistent_source_fetch(
-            name,self.p,fn,cooldown_seconds=hours*3600,max_cached=limit)
-        if src=="gupy":return dedupe_multisource(cached("Gupy",lambda:fetch_gupy(self.p),1),self.p)
-        if src=="linkedin":return dedupe_multisource(cached("LinkedIn",lambda:fetch_linkedin(self.p),6),self.p)
-        if src=="google":return dedupe_multisource(fetch_google(
-            self.p,max_queries=google_limit,max_jobs=google_jobs),self.p)
-        if src=="indeed":return dedupe_multisource(fetch_google(
-            self.p,"br.indeed.com","Indeed/Google",max_queries=google_limit,max_jobs=google_jobs),self.p)
+        internship_only=internship_search_mode(self.p)=="somente"
+        internship_mode=internship_search_mode(self.p)
+        google_limit=32 if internship_only else (20 if entry_mode else 12)
+        google_jobs=120 if internship_only else (100 if entry_mode else 60)
+        def scoped_profile(kind):
+            profile=dict(self.p)
+            suffix="estagio" if kind=="estagios" else "vagas"
+            wants_internships=(kind=="estagios")
+            def scoped_queries(provider):
+                key=f"consultas_{suffix}_{provider}"
+                if key in self.p:return list(self.p.get(key,[]))
+                legacy_key="consultas_"+provider
+                return [query for query in self.p.get(legacy_key,[])
+                        if is_internship_query(query)==wants_internships]
+            profile["consultas_gupy"]=scoped_queries("gupy")
+            profile["consultas_linkedin"]=scoped_queries("linkedin")
+            profile["consultas_google"]=scoped_queries("google")
+            profile["consultas_br"]=list(profile["consultas_gupy"])
+            profile["modo_estagios"]="somente" if kind=="estagios" else "nao_buscar"
+            profile["buscar_estagios"]=(kind=="estagios")
+            return profile
+        regular_profile=scoped_profile("vagas")
+        internship_profile=scoped_profile("estagios")
+        scopes=([("Estágios",internship_profile)] if internship_mode=="somente" else
+                [("Vagas",regular_profile),("Estágios",internship_profile)] if internship_mode=="incluir" else
+                [("Vagas",regular_profile)])
+        scopes=[item for item in scopes if item[0]=="Vagas" or any(item[1].get(key) for key in
+                ("consultas_gupy","consultas_linkedin","consultas_google"))]
+        def cached(name,profile,fn,hours=1,limit=600):
+            return persistent_source_fetch(name,profile,fn,cooldown_seconds=hours*3600,max_cached=limit)
+        def collect_scoped(provider,fetcher,hours=1,limit=600):
+            jobs=[]
+            for label,profile in scopes:
+                jobs += cached(f"{provider} / {label}",profile,lambda p=profile:fetcher(p),hours,limit)
+            return dedupe_multisource(jobs,self.p)
+        if src=="gupy":return collect_scoped("Gupy",fetch_gupy,1)
+        if src=="linkedin":return collect_scoped("LinkedIn",fetch_linkedin,6)
+        if src=="google":return collect_scoped("Google",lambda p:fetch_google(
+            p,max_queries=32 if internship_search_mode(p)=="somente" else google_limit,
+            max_jobs=120 if internship_search_mode(p)=="somente" else google_jobs),3,300)
+        if src=="indeed":return collect_scoped("Indeed via Google",lambda p:fetch_google(
+            p,"br.indeed.com","Indeed/Google",max_queries=32 if internship_search_mode(p)=="somente" else google_limit,
+            max_jobs=120 if internship_search_mode(p)=="somente" else google_jobs),3,300)
         if src=="remote":return dedupe_multisource(fetch_remotive(self.p),self.p)
         if src=="all":
             jobs=[]
-            sources={
-                "Gupy":lambda:cached("Gupy",lambda:fetch_gupy(self.p),1),
-                "LinkedIn":lambda:cached("LinkedIn",lambda:fetch_linkedin(self.p),6),
-                "Google":lambda:cached("Google",lambda:fetch_google(
-                    self.p,max_queries=google_limit,max_jobs=google_jobs),3,300),
-                "Indeed via Google":lambda:cached("Indeed via Google",lambda:fetch_google(
-                    self.p,"br.indeed.com","Indeed/Google",max_queries=google_limit,max_jobs=google_jobs),3,300),
-                "Vagas em Games via Google":lambda:cached("Vagas em Games via Google",lambda:fetch_google(
+            sources={}
+            for label,profile in scopes:
+                per_google_limit=32 if label=="Estágios" else google_limit
+                per_google_jobs=120 if label=="Estágios" else google_jobs
+                sources.update({
+                f"Gupy / {label}":lambda p=profile,l=label:cached(
+                    f"Gupy / {l}",p,lambda:fetch_gupy(p),1),
+                f"LinkedIn / {label}":lambda p=profile,l=label:cached(
+                    f"LinkedIn / {l}",p,lambda:fetch_linkedin(p),6),
+                f"Google / {label}":lambda p=profile,l=label,g=per_google_limit,j=per_google_jobs:cached(
+                    f"Google / {l}",p,lambda:fetch_google(p,max_queries=g,max_jobs=j),3,300),
+                f"Indeed via Google / {label}":lambda p=profile,l=label,g=per_google_limit,j=per_google_jobs:cached(
+                    f"Indeed via Google / {l}",p,lambda:fetch_google(
+                        p,"br.indeed.com","Indeed/Google",max_queries=g,max_jobs=j),3,300),
+                })
+            sources.update({
+                "Vagas em Games via Google":lambda:cached("Vagas em Games via Google",self.p,lambda:fetch_google(
                     self.p,"vagasemgames.com.br/vagas","Vagas em Games/Google",max_queries=4,max_results=5,max_jobs=20),3,120)
-            }
+            })
+            if internship_mode!="nao_buscar" and internship_profile.get("consultas_google"):
+                sources["Portais de estágio"]=lambda:cached(
+                    "Portais de estágio",internship_profile,
+                    lambda:fetch_internship_portals(internship_profile),6,300)
             if international_search_enabled(self.p):
                 sources.update({
-                "Remotive":lambda:cached("Remotive",lambda:fetch_remotive(self.p),3,300),
-                "Jobicy":lambda:cached("Jobicy",lambda:fetch_jobicy(self.p),3,300),
-                "Himalayas":lambda:cached("Himalayas",lambda:fetch_himalayas(self.p),3,300),
-                "Remote Landers":lambda:cached("Remote Landers",lambda:fetch_remote_landers(self.p),3,300),
-                "Remote Game Jobs":lambda:cached("Remote Game Jobs",lambda:fetch_remote_game_jobs(self.p),3,300),
-                "Work With Indies":lambda:cached("Work With Indies",lambda:fetch_work_with_indies(self.p),3,300),
-                "Hitmarker via Google":lambda:cached("Hitmarker via Google",lambda:fetch_google(
+                "Remotive":lambda:cached("Remotive",self.p,lambda:fetch_remotive(self.p),3,300),
+                "Jobicy":lambda:cached("Jobicy",self.p,lambda:fetch_jobicy(self.p),3,300),
+                "Himalayas":lambda:cached("Himalayas",self.p,lambda:fetch_himalayas(self.p),3,300),
+                "Remote Landers":lambda:cached("Remote Landers",self.p,lambda:fetch_remote_landers(self.p),3,300),
+                "Remote Game Jobs":lambda:cached("Remote Game Jobs",self.p,lambda:fetch_remote_game_jobs(self.p),3,300),
+                "Work With Indies":lambda:cached("Work With Indies",self.p,lambda:fetch_work_with_indies(self.p),3,300),
+                "Hitmarker via Google":lambda:cached("Hitmarker via Google",self.p,lambda:fetch_google(
                     self.p,"hitmarker.net/jobs","Hitmarker/Google",max_queries=4,max_results=5,max_jobs=20),3,120)
                 })
             source_count=len(sources)
@@ -3151,6 +3590,32 @@ class App(tk.Tk):
         if moved:self.refresh()
         return moved
 
+    def apply_internship_mode(self,mode):
+        mode=mode if mode in INTERNSHIP_MODE_LABELS else internship_search_mode(self.p)
+        self.p["modo_estagios"]=mode
+        self.p["buscar_estagios"]=mode!="nao_buscar"
+        changed=self.apply_internship_preference(mode!="nao_buscar")
+        reason="modo somente estágios"
+        if mode!="somente":
+            ids=[row[0] for row in self.conn.execute(
+                "SELECT id FROM descartadas WHERE motivo_descarte=?",(reason,))]
+            restored=sum(1 for did in ids if self.restore_discarded_record(did,refresh=False))
+            if restored:self.refresh()
+            return changed+restored
+        rows=self.conn.execute("""SELECT id,titulo,empresa,local,descricao,url,fonte,data_publicacao,salario
+                                  FROM vagas WHERE status='Nova' AND COALESCE(selecionada_lote,0)=0""").fetchall()
+        moved=0
+        for vid,titulo,empresa,local,descricao,url,fonte,pub,salario in rows:
+            job={"titulo":titulo or "","empresa":empresa or "","local":local or "",
+                 "descricao":descricao or "","url":url or "","fonte":fonte or "",
+                 "data_publicacao":pub or "","salario":salario or ""}
+            if is_intern(job):continue
+            self.save_discarded(job,reason)
+            self.conn.execute("UPDATE vagas SET status='Ignorada',selecionada_lote=0 WHERE id=?",(vid,));moved+=1
+        self.conn.commit()
+        if moved:self.refresh()
+        return changed+moved
+
     def apply_international_preference(self,enabled):
         """Oculta resultados de fontes internacionais sem afetar vagas brasileiras."""
         reason="vagas internacionais desativadas pelo usuário"
@@ -3255,15 +3720,60 @@ class App(tk.Tk):
         if restored or moved:self.refresh()
         return moved,restored
 
+    def apply_publication_age_preference(self):
+        """Move/restaura vagas datadas conforme o período, preservando fila e histórico."""
+        prefix="vaga antiga ("
+        rows=self.conn.execute("""SELECT id,titulo,empresa,local,descricao,url,fonte,data_publicacao,salario,
+                                         COALESCE(workplace_type,''),
+                                         COALESCE(applicant_location_requirements,''),
+                                         COALESCE(structured_location_json,'')
+                                  FROM descartadas WHERE motivo_descarte LIKE ?""",(prefix+"%",)).fetchall()
+        restored=0
+        for did,title,company,location,description,url,source,published,salary,workplace,requirements,structured in rows:
+            job={"titulo":title or "","empresa":company or "","local":location or "",
+                 "descricao":description or "","url":url or "","fonte":source or "",
+                 "data_publicacao":published or "","salario":salary or "",
+                 "workplace_type":workplace or "","applicant_location_requirements":requirements or "",
+                 "structured_location_json":structured or ""}
+            if vacancy_date_ok(job,self.p)[0]:
+                restored+=bool(self.restore_discarded_record(did,refresh=False))
+
+        active=self.conn.execute("""SELECT id,titulo,empresa,local,descricao,url,fonte,data_publicacao,salario,
+                                       COALESCE(workplace_type,''),
+                                       COALESCE(applicant_location_requirements,''),
+                                       COALESCE(structured_location_json,'')
+                                    FROM vagas WHERE status='Nova' AND COALESCE(selecionada_lote,0)=0""").fetchall()
+        moved=0
+        for vid,title,company,location,description,url,source,published,salary,workplace,requirements,structured in active:
+            job={"titulo":title or "","empresa":company or "","local":location or "",
+                 "descricao":description or "","url":url or "","fonte":source or "",
+                 "data_publicacao":published or "","salario":salary or "",
+                 "workplace_type":workplace or "","applicant_location_requirements":requirements or "",
+                 "structured_location_json":structured or ""}
+            allowed,age=vacancy_date_ok(job,self.p)
+            if allowed:continue
+            reason=f"vaga antiga ({age} dias)"
+            self.save_discarded(job,reason)
+            self.conn.execute("UPDATE vagas SET status='Ignorada',selecionada_lote=0 WHERE id=?",(vid,));moved+=1
+        self.conn.commit()
+        if restored or moved:self.refresh()
+        return moved,restored
+
     def show_manually_discarded(self):
         self.show_discarded(manual_only=True)
 
     def show_location_excluded(self):
         self.show_discarded(location_only=True)
 
-    def show_discarded(self,manual_only=False,location_only=False):
-        window_key="localidades_excluidas" if location_only else "descartadas_manuais" if manual_only else "fora_perfil"
-        window_title="Vagas excluídas por localidade" if location_only else "Vagas descartadas pelo usuário" if manual_only else "Vagas fora do perfil"
+    def show_model_unconfirmed(self):
+        self.show_discarded(model_unconfirmed=True)
+
+    def show_discarded(self,manual_only=False,location_only=False,model_unconfirmed=False):
+        window_key=("modelo_confirmar" if model_unconfirmed else "localidades_excluidas" if location_only
+                    else "descartadas_manuais" if manual_only else "fora_perfil")
+        window_title=("Vagas com modelo a confirmar" if model_unconfirmed else
+                      "Vagas excluídas por localidade" if location_only else
+                      "Vagas descartadas pelo usuário" if manual_only else "Vagas fora do perfil")
         win,created=self.managed_window(window_key,window_title,"1250x650")
         if not created:return
 
@@ -3292,7 +3802,7 @@ class App(tk.Tk):
         title=tk.StringVar(value="Selecione uma vaga descartada")
         ttk.Label(right,textvariable=title,font=("Segoe UI",12,"bold"),wraplength=450).pack(anchor="w",pady=(5,8))
         meta=tk.StringVar();ttk.Label(right,textvariable=meta,wraplength=450).pack(anchor="w")
-        c=getattr(self,"colors",{"white":"#0f151d","ink":"#e6edf3","line":"#30363d","blue_soft":"#243650"})
+        c=getattr(self,"colors",{"white":"#202938","ink":"#e6eaf0","line":"#344154","blue_soft":"#304a70"})
         desc=tk.Text(right,wrap="word",bg=c["white"],fg=c["ink"],insertbackground=c["ink"],
                      selectbackground=c["blue_soft"],relief="flat",highlightthickness=1,highlightbackground=c["line"])
         desc.pack(fill="both",expand=True,pady=8);desc.configure(state="disabled")
@@ -3307,6 +3817,9 @@ class App(tk.Tk):
             if manual_only:
                 clauses.append("motivo_descarte = ?")
                 params.append("Descartada pelo usuário")
+            elif model_unconfirmed:
+                clauses.append("motivo_descarte LIKE ?")
+                params.append("%remoto não confirmado%")
             elif location_only:
                 clauses.append("motivo_descarte LIKE ?")
                 params.append("localidade excluída pelo usuário — %")
@@ -3580,7 +4093,7 @@ class App(tk.Tk):
         self.stop_search_animation()
         self.p=load_profile()
         self.apply_pcd_preference(pcd_vacancies_enabled(self.p))
-        self.apply_internship_preference(bool(self.p.get("buscar_estagios",True)))
+        self.apply_internship_mode(internship_search_mode(self.p))
         self.apply_apprentice_preference(bool(self.p.get("buscar_jovem_aprendiz",False)))
         self.prog.stop();self.refresh()
         rec=self.conn.execute("SELECT COUNT(*) FROM vagas WHERE status='Nova' AND COALESCE(selecionada_lote,0)=0 AND decisao='APROVADA'").fetchone()[0]
@@ -3635,12 +4148,15 @@ class App(tk.Tk):
                                   ("Descartada pelo usuário","localidade excluída pelo usuário — %")).fetchone()[0]
             excluded=self.conn.execute("SELECT COUNT(*) FROM descartadas WHERE motivo_descarte LIKE ?",
                                        ("localidade excluída pelo usuário — %",)).fetchone()[0]
+            model_pending=self.conn.execute("SELECT COUNT(*) FROM descartadas WHERE motivo_descarte LIKE ?",
+                                            ("%remoto não confirmado%",)).fetchone()[0]
             discarded=self.conn.execute("SELECT COUNT(*) FROM descartadas WHERE motivo_descarte=?",
                                         ("Descartada pelo usuário",)).fetchone()[0]
             self.stat_rec.set(f"Recomendadas: {rec}")
             self.stat_rev.set(f"Vale conferir: {rev}")
             self.stat_app.set(f"Candidaturas: {appc}")
             self.stat_out.set(f"Fora do perfil: {out}")
+            self.stat_model_pending.set(f"Modelo a confirmar: {model_pending}")
             self.stat_location_excluded.set(f"Localidades excluídas: {excluded}")
             self.stat_discarded.set(f"Descartadas: {discarded}")
         except Exception:
@@ -3653,7 +4169,8 @@ class App(tk.Tk):
         view=self.view_mode.get() if hasattr(self,"view_mode") else "todas"
         sql,pa=jobs_query(view,self.q.get())
 
-        for vid,score,titulo,empresa,local,modo,cat,status,queued,published_at in self.conn.execute(sql,pa):
+        rows=list(self.conn.execute(sql,pa))
+        for vid,score,titulo,empresa,local,modo,cat,status,queued,published_at in rows:
             lm=simple_location_mode(local,modo)
             tag="great" if (score or 0)>=80 else "possible"
             checked=vid in self.batch_selection if hasattr(self,"batch_selection") else bool(queued)
@@ -3662,6 +4179,12 @@ class App(tk.Tk):
             self.tree.insert("","end",iid=str(vid),values=("☑" if checked else "☐",f"{score}%",titulo,empresa,lm,published),tags=(tag,))
         if self.job_sort_state["column"]:
             self.sort_jobs(self.job_sort_state["column"],self.job_sort_state["reverse"])
+        if hasattr(self,"empty_state") and hasattr(self,"main_pane"):
+            show_empty=not self.cv.strip() and not rows
+            if show_empty and not self.empty_state.winfo_manager():
+                self.empty_state.pack(fill="x",pady=(0,10),before=self.main_pane)
+            elif not show_empty and self.empty_state.winfo_manager():
+                self.empty_state.pack_forget()
         self.update_dashboard_counts()
 
     def select(self,e=None):
@@ -4081,12 +4604,14 @@ class App(tk.Tk):
                 import shutil; shutil.copy2(path,dest)
                 self.p["arquivo_curriculo_original"]=os.path.basename(dest)
                 self.cv=text
+                self.p["areas_estagio_manual"]=False
                 prof=adapt_profile_to_cv(self.p,text);save_json_file(PROFILE_PATH,self.p)
                 recalculated=self.recalculate_all_jobs();self.refresh()
                 cvstatus.set("Currículo carregado — perfil atualizado")
                 areas.set(", ".join(prof["areas"]))
                 language.set(self.p.get("idioma_curriculo_detectado","Misto/indefinido"))
                 english_choice.set(english_level(self.p))
+                rebuild_internship_areas()
                 international.set(international_search_enabled(self.p))
                 entry_hint.set("Currículo de entrada identificado. Ative a busca ampliada abaixo se desejar."
                                if self.p.get("perfil_inicio_carreira_detectado",False) else "")
@@ -4103,7 +4628,40 @@ class App(tk.Tk):
         english_choice=tk.StringVar(value=english_level(self.p))
         english_combo=ttk.Combobox(body,textvariable=english_choice,state="readonly",width=22,
                                    values=ENGLISH_LEVELS)
-        english_combo.pack(anchor="w",pady=(3,12))
+        english_combo.pack(anchor="w",pady=(3,8))
+        ttk.Label(body,text="Como buscar estágios:").pack(anchor="w")
+        internship_choice=tk.StringVar(value=INTERNSHIP_MODE_LABELS[internship_search_mode(self.p)])
+        internship_combo=ttk.Combobox(body,textvariable=internship_choice,state="readonly",width=34,
+                                      values=list(INTERNSHIP_MODE_LABELS.values()))
+        internship_combo.pack(anchor="w",pady=(3,7))
+        internship_areas_frame=ttk.LabelFrame(body,text="Áreas de estágio",padding=8)
+        internship_areas_frame.pack(fill="x",pady=(0,12))
+        internship_area_vars={}
+        extra_internship_areas=tk.StringVar()
+        def rebuild_internship_areas():
+            for child in internship_areas_frame.winfo_children():child.destroy()
+            internship_area_vars.clear()
+            selected=internship_selected_areas(self.p)
+            detected=list(self.p.get("cursos_curriculo_detectados",[]))
+            candidates=list(dict.fromkeys(detected+selected))
+            if candidates:
+                ttk.Label(internship_areas_frame,text="Selecione uma ou mais áreas:").pack(anchor="w",pady=(0,3))
+                for course in candidates:
+                    variable=tk.BooleanVar(value=course in selected);internship_area_vars[course]=variable
+                    ttk.Checkbutton(internship_areas_frame,text=course.title(),variable=variable).pack(anchor="w")
+            else:
+                ttk.Label(internship_areas_frame,text="Nenhum curso identificado; informe a área desejada.").pack(anchor="w")
+            ttk.Label(internship_areas_frame,text="Outras áreas (separadas por vírgula)").pack(anchor="w",pady=(5,0))
+            ttk.Entry(internship_areas_frame,textvariable=extra_internship_areas).pack(fill="x",pady=(3,0))
+        rebuild_internship_areas()
+        def sync_internship_area_state(_event=None):
+            if internship_search_mode({"modo_estagios":next(
+                    (key for key,label in INTERNSHIP_MODE_LABELS.items() if label==internship_choice.get()),"nao_buscar")})=="nao_buscar":
+                internship_areas_frame.pack_forget()
+            elif not internship_areas_frame.winfo_manager():
+                internship_areas_frame.pack(fill="x",pady=(0,12),after=internship_combo)
+        internship_combo.bind("<<ComboboxSelected>>",sync_internship_area_state)
+        sync_internship_area_state()
         entry_hint=tk.StringVar(value=("Currículo de entrada identificado. Ative a busca ampliada abaixo se desejar."
             if self.p.get("perfil_inicio_carreira_detectado",False) else ""))
         ttk.Label(body,textvariable=entry_hint,foreground=self.colors["blue_dark"],wraplength=580).pack(anchor="w",pady=(0,7))
@@ -4120,8 +4678,6 @@ class App(tk.Tk):
         excluded_locations=tk.StringVar(value=", ".join(self.p.get("localidades_excluidas",[])))
         ttk.Entry(locf,textvariable=excluded_locations).pack(fill="x",pady=(3,7))
         remote=tk.BooleanVar(value=self.p.get("aceitar_remoto",True));ttk.Checkbutton(locf,text="Aceito vagas remotas",variable=remote).pack(anchor="w")
-        internships=tk.BooleanVar(value=self.p.get("buscar_estagios",True))
-        ttk.Checkbutton(locf,text="Buscar estágios",variable=internships).pack(anchor="w",pady=(4,0))
         pcd_vacancies=tk.BooleanVar(value=pcd_vacancies_enabled(self.p))
         ttk.Checkbutton(locf,text="Buscar vagas para PCD",variable=pcd_vacancies).pack(anchor="w",pady=(4,0))
         international=tk.BooleanVar(value=international_search_enabled(self.p))
@@ -4169,7 +4725,14 @@ class App(tk.Tk):
             self.p["localidades_excluidas"]=list(dict.fromkeys(
                 value.strip() for value in excluded_locations.get().split(",") if value.strip()))
             self.p["aceitar_remoto"]=bool(remote.get())
-            self.p["buscar_estagios"]=bool(internships.get())
+            selected_internship_mode=next(
+                (key for key,label in INTERNSHIP_MODE_LABELS.items() if label==internship_choice.get()),"nao_buscar")
+            selected_areas=[course for course,variable in internship_area_vars.items() if variable.get()]
+            selected_areas += [value.strip() for value in extra_internship_areas.get().split(",") if value.strip()]
+            self.p["modo_estagios"]=selected_internship_mode
+            self.p["buscar_estagios"]=selected_internship_mode!="nao_buscar"
+            self.p["areas_estagio"]=list(dict.fromkeys(selected_areas))
+            self.p["areas_estagio_manual"]=True
             self.p["buscar_vagas_pcd"]=pcd_enabled
             self.p["nivel_ingles"]=normalize_english_level(english_choice.get())
             self.p["nivel_ingles_manual"]=True
@@ -4183,12 +4746,16 @@ class App(tk.Tk):
             browser_map={"Automático":"automatico","Google Chrome":"chrome","Microsoft Edge":"edge",
                          "Brave":"brave","Chromium interno":"chromium","Firefox":"firefox"}
             self.p["navegador_automacao"]=browser_map.get(browser_choice.get(),"automatico")
-            try:self.p["idade_maxima_dias"]=max(1,int(days.get()))
+            try:
+                selected_days=max(1,int(days.get()))
+                self.p["idade_maxima_dias"]=selected_days
+                self.p["idade_maxima_vaga_dias"]=selected_days
             except:pass
             if self.cv.strip():adapt_profile_to_cv(self.p,self.cv)
             save_json_file(PROFILE_PATH,self.p)
+            self.apply_publication_age_preference()
             self.apply_pcd_preference(pcd_enabled)
-            self.apply_internship_preference(bool(internships.get()))
+            self.apply_internship_mode(selected_internship_mode)
             self.apply_apprentice_preference(bool(apprentice.get()))
             self.apply_international_preference(bool(international.get()))
             self.apply_excluded_locations()
@@ -4210,7 +4777,7 @@ class App(tk.Tk):
                 canvas.update_idletasks();canvas.yview_moveto(1.0)
 
         ttk.Button(actions,textvariable=advanced_text,style="Soft.TButton",command=toggle_advanced).pack(side="left")
-        ttk.Button(actions,text="Privacidade",style="Soft.TButton",
+        ttk.Button(actions,text="Privacidade e termos",style="Soft.TButton",
                    command=lambda:self.show_privacy_notice(False)).pack(side="left",padx=6)
         ttk.Button(actions,text="Salvar",style="Primary.TButton",command=save).pack(side="right")
 

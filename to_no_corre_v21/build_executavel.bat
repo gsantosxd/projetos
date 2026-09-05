@@ -12,6 +12,7 @@ if errorlevel 1 goto :erro
 
 copy /y README_INICIO.txt dist\ToNoCorre\README_INICIO.txt >nul
 copy /y PRIVACIDADE.md dist\ToNoCorre\PRIVACIDADE.md >nul
+copy /y TERMOS_DE_USO.md dist\ToNoCorre\TERMOS_DE_USO.md >nul
 echo.
 echo Executavel criado em dist\ToNoCorre\ToNoCorre.exe
 pause
